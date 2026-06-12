@@ -100,6 +100,7 @@ signals:
     void karaokeAutoAdvanceChanged(bool enabled);
     void enforceAspectRatioChanged(bool enabled);
     void treatAllSingersAsRegsChanged(bool enabled);
+    void spotifyEnabledChanged(bool enabled);
     void requestServerIntervalChanged(int interval);
     void rotationDurationSettingsModified();
     void rotationShowNextSongChanged(bool enabled);
@@ -127,8 +128,8 @@ private slots:
     void on_checkBoxSilenceDetectionBm_toggled(bool checked);
     void on_checkBoxDownmix_toggled(bool checked);
     void on_checkBoxDownmixBm_toggled(bool checked);
-    void on_comboBoxDevice_currentIndexChanged(const QString &arg1);
-    void on_comboBoxCodec_currentIndexChanged(const QString &arg1);
+    void on_comboBoxDevice_currentIndexChanged(int index);
+    void on_comboBoxCodec_currentIndexChanged(int index);
     void on_groupBoxRecording_toggled(bool arg1);
     void on_buttonBrowse_clicked();
     void onNetworkReply(QNetworkReply* reply);

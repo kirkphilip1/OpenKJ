@@ -20,7 +20,7 @@ jobs:
             bits: 64
             arch: x86_64
             msvcarch: x64
-            qtarch: win64_msvc2019_64
+            qtarch: win64_msvc2022_64
 
     steps:
     - uses: actions/checkout@v5
@@ -98,29 +98,19 @@ jobs:
         sed -i "s/#define MyAppVersion.*/#define MyAppVersion \"${{ steps.get_version.outputs.version-without-v }}\"/" cd/openkj${{ matrix.bits }}.iss
       shell: bash
 
-    - name: Download GST Installer
+    - name: Download LibVLC
       uses: carlosperate/download-file-action@v2
-      id: download-gst
+      id: download-vlc
       with:
-        file-url: 'https://gstreamer.freedesktop.org/data/pkg/windows/1.27.1/mingw/gstreamer-1.0-mingw-${{ matrix.arch }}-1.27.1.msi'
-        file-name: 'gstreamer.msi'
+        file-url: 'https://get.videolan.org/vlc/3.0.20/win64/vlc-3.0.20-win64.zip'
+        file-name: 'vlc.zip'
         location: './downloads'
 
-    - name: Download GST-Dev Installer
-      uses: carlosperate/download-file-action@v2
-      id: download-gst-dev
-      with:
-        file-url: 'https://gstreamer.freedesktop.org/data/pkg/windows/1.27.1/mingw/gstreamer-1.0-devel-mingw-${{ matrix.arch }}-1.27.1.msi'
-        file-name: 'gstreamer-devel.msi'
-        location: './downloads'
-
-    - name: Download InfoZip Binary
-      uses: carlosperate/download-file-action@v2
-      id: download-infozip
-      with:
-        file-url: 'https://storage.googleapis.com/okj-installer-deps/unzip.exe'
-        file-name: unzip.exe
-        location: /cached-downloads
+    - name: Extract LibVLC
+      shell: powershell
+      run: |
+        Expand-Archive -Path ./downloads/vlc.zip -DestinationPath ./downloads/vlc-extracted
+        Move-Item -Path ./downloads/vlc-extracted/vlc-3.0.20 -Destination C:\vlc-sdk
 
     - name: Download OpenSSL dll files
       uses: carlosperate/download-file-action@v2
@@ -162,26 +152,12 @@ jobs:
         file-name: SourceCodePro-Medium.ttf
         location: /cached-downloads
 
-    - name: Install GST
-      shell: powershell
-      run: |
-        start-process -wait msiexec -argumentlist '/q /i ${{ steps.download-gst.outputs.file-path }} ADDLOCAL=ALL'
-        start-sleep 10
-        start-process -wait msiexec -argumentlist '/q /i ${{ steps.download-gst-dev.outputs.file-path }} ADDLOCAL=ALL'
-        start-sleep 10
-
-    - name: Make dist copy of gstreamer
-      run: |
-        cp -Rv c:/Program\ Files/gstreamer ./gstreamer-dist
-      shell: bash
-
     - name: Install Qt
       uses: jurplel/install-qt-action@v4
       with:
-       version: '5.15.2'
+       version: '6.8.0'
        arch: ${{ matrix.qtarch }}
-       modules: 'qtnetworkauth'
-       archives: 'qtbase qtsvg'
+       modules: 'qtsvg qtnetworkauth qtmultimedia qtwebsockets'
 
     - name: Create Build Environment
       run: cmake -E make_directory ${{github.workspace}}/build
@@ -195,7 +171,7 @@ jobs:
       shell: cmd
       working-directory: ${{github.workspace}}/build
       run: |
-        cmake .. -DCMAKE_BUILD_TYPE=Release -G Ninja
+        cmake .. -DCMAKE_BUILD_TYPE=Release -DLIBVLC_SDK_PATH=C:/vlc-sdk -G Ninja
 
     - name: Build
       working-directory: ${{github.workspace}}/build
@@ -213,16 +189,16 @@ jobs:
         dir output
       shell: cmd
 
-    - name: Copy in gstreamer dependencies
+    - name: Copy in LibVLC dependencies
       run: |
-        cp -Rv ./gstreamer-dist/1.0/mingw_${{ matrix.arch }}/* output/
-        cp -v ./gstreamer-dist/1.0/mingw_${{ matrix.arch }}/bin/*.dll output/
+        cp -v C:/vlc-sdk/libvlc.dll output/
+        cp -v C:/vlc-sdk/libvlccore.dll output/
+        cp -Rv C:/vlc-sdk/plugins output/
       shell: bash
 
     - name: Copy in other dependencies
       run: |
         copy LICENSE output\LICENSE.txt
-        copy ${{ steps.download-infozip.outputs.file-path }} output\
         copy ${{ steps.download-roboto-bold.outputs.file-path }} output\
         copy ${{ steps.download-roboto-medium.outputs.file-path }} output\
         copy ${{ steps.download-roboto-regular.outputs.file-path }} output\
@@ -238,8 +214,6 @@ jobs:
 
     - name: Create Installer
       run: |
-        curl.exe -sLO https://files.jrsoftware.org/is/6/innosetup-6.4.3.exe
-        .\innosetup-6.4.3.exe /silent
         cp cd\openkj64.iss inst.iss
         mkdir installer
         "%programfiles(x86)%\Inno Setup 6\iscc.exe" inst.iss /Oinstaller\

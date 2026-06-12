@@ -25,16 +25,11 @@ std::ostream& operator<<(std::ostream& os, const BreakSong& b)
                     << ")}";
 }
 
-std::ostream & operator<<(std::ostream& os, const QString& s)
-{
-    return os << s.toStdString();
-}
 
 TableModelBreakSongs::TableModelBreakSongs(QObject *parent)
     : QAbstractTableModel(parent)
 {
     m_logger = spdlog::get("logger");
-    loadDatabase();
 }
 
 QVariant TableModelBreakSongs::headerData(int section, Qt::Orientation orientation, int role) const
@@ -95,12 +90,12 @@ QVariant TableModelBreakSongs::data(const QModelIndex &index, int role) const
     }
     if (role == Qt::TextAlignmentRole)
     {
-        switch (index.column()) {
-        case COL_DURATION:
-            return Qt::AlignRight + Qt::AlignVCenter;
-        default:
-            return Qt::AlignLeft + Qt::AlignVCenter;
-        }
+         switch (index.column()) {
+         case COL_DURATION:
+             return static_cast<int>(Qt::AlignRight | Qt::AlignVCenter);
+         default:
+             return static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter);
+         }
     }
     return QVariant();
 }

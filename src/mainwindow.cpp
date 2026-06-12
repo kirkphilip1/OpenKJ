@@ -22,7 +22,6 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include <QMessageBox>
-#include <QDesktopWidget>
 #include <QMenu>
 #include <QInputDialog>
 #include <QFileDialog>
@@ -38,9 +37,9 @@
 #include <algorithm>
 #include <memory>
 #include "dlgaddsong.h"
-#include <spdlog/version.h>
 #include <taglib.h>
-#include <miniz/miniz.h>
+#include <zip.h>
+#include <vlc/vlc.h>
 #include "okjtypes.h"
 
 #ifdef _MSC_VER
@@ -594,7 +593,7 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->sliderBmVolume->setMaximumWidth(12);
     ui->sliderProgress->setMaximumHeight(12);
 #endif
-    QDir okjDataDir(QStandardPaths::writableLocation(QStandardPaths::DataLocation));
+    QDir okjDataDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
     if (!okjDataDir.exists()) {
         okjDataDir.mkpath(okjDataDir.absolutePath());
     }
@@ -720,6 +719,22 @@ MainWindow::MainWindow(QWidget *parent) :
     m_mediaBackendKar.setVideoOutputWidgets(videoWidgets);
     m_settings.setStartupOk(true);
     m_mediaBackendBm.stop(true);
+
+    m_spotifyAuth = new SpotifyAuthController(this);
+    m_spotifyClient = new SpotifyClient(m_spotifyAuth, this);
+    m_spotifyTab = new SpotifyTab(m_spotifyAuth, m_spotifyClient, this);
+    if (m_settings.spotifyEnabled()) {
+        ui->tabWidget->addTab(m_spotifyTab, "Spotify");
+    }
+
+    connect(m_spotifyClient, &SpotifyClient::volumeChanged, this, [](int vol) {
+        QSettings settings;
+        if (vol > 0) {
+            settings.setValue("spotify/last_volume", vol);
+        }
+    });
+
+
 
     loadSettings();
     setupShortcuts();
@@ -1276,6 +1291,43 @@ void MainWindow::dbInit(const QDir &okjDataDir) {
                            singersQuery.value("name").toString().toStdString());
         }
     }
+
+    // Initialize background DatabaseWorker thread
+    QString dbPath = okjDataDir.absolutePath() + QDir::separator() + "openkj.sqlite";
+    m_dbThread = new QThread(this);
+    m_dbWorker = new DatabaseWorker(dbPath);
+    m_dbWorker->moveToThread(m_dbThread);
+
+    connect(m_dbThread, &QThread::started, m_dbWorker, &DatabaseWorker::init);
+    connect(m_dbThread, &QThread::finished, m_dbWorker, &QObject::deleteLater);
+
+    // Connection: Worker reads -> Models
+    connect(m_dbWorker, &DatabaseWorker::rotationLoaded, &m_rotModel, &TableModelRotation::onRotationLoaded);
+    connect(m_dbWorker, &DatabaseWorker::queueLoaded, &m_qModel, &TableModelQueueSongs::onQueueLoaded);
+
+    // Connection: Models requests -> Worker reads
+    connect(&m_rotModel, &TableModelRotation::requestLoadRotation, m_dbWorker, &DatabaseWorker::loadRotation);
+    connect(&m_qModel, &TableModelQueueSongs::requestLoadQueue, m_dbWorker, &DatabaseWorker::loadQueue);
+
+    // Connection: Model writes -> Worker (Rotation)
+    connect(&m_rotModel, &TableModelRotation::requestCommitRotation, m_dbWorker, &DatabaseWorker::commitRotation);
+    connect(&m_rotModel, &TableModelRotation::requestAddSinger, m_dbWorker, &DatabaseWorker::addSinger);
+    connect(&m_rotModel, &TableModelRotation::requestAddSingerWithSong, m_dbWorker, &DatabaseWorker::addSingerWithSong);
+    connect(&m_rotModel, &TableModelRotation::requestRenameSinger, m_dbWorker, &DatabaseWorker::renameSinger);
+    connect(&m_rotModel, &TableModelRotation::requestSetSingerRegular, m_dbWorker, &DatabaseWorker::setSingerRegular);
+    connect(&m_rotModel, &TableModelRotation::requestClearRotation, m_dbWorker, &DatabaseWorker::clearRotation);
+
+    // Connection: Model writes -> Worker (Queue)
+    connect(&m_qModel, &TableModelQueueSongs::requestCommitQueue, m_dbWorker, &DatabaseWorker::commitQueue);
+    connect(&m_qModel, &TableModelQueueSongs::requestSetQueueSongKey, m_dbWorker, &DatabaseWorker::setQueueSongKey);
+    connect(&m_qModel, &TableModelQueueSongs::requestSetQueueSongPlayed, m_dbWorker, &DatabaseWorker::setQueueSongPlayed);
+    connect(&m_qModel, &TableModelQueueSongs::requestRemoveAllQueueSongs, m_dbWorker, &DatabaseWorker::removeAllQueueSongs);
+    connect(&m_qModel, &TableModelQueueSongs::requestAddSongToQueue, m_dbWorker, &DatabaseWorker::addSongToQueue);
+
+    // Connection: Worker events -> Model slots
+    connect(m_dbWorker, &DatabaseWorker::singerAdded, &m_rotModel, &TableModelRotation::onSingerAdded);
+
+    m_dbThread->start();
 }
 
 
@@ -1315,8 +1367,12 @@ void MainWindow::play(const QString &karaokeFilePath, const bool &k2k) {
                     m_logger->info("{} Setting karaoke backend source file to: {}", m_loggingPrefix,
                                    audioFile.toStdString());
                     m_mediaBackendKar.setMediaCdg(cdgFile, audioFile);
-                    if (!k2k)
-                        m_mediaBackendBm.fadeOut(!m_settings.bmKCrossFade());
+                    if (!k2k) {
+                        if (spotifyUseForBreakMusic())
+                            fadeOutSpotify();
+                        else
+                            m_mediaBackendBm.fadeOut(!m_settings.bmKCrossFade());
+                    }
                     m_logger->info("{} Beginning playback of file: {}", m_loggingPrefix, audioFile.toStdString());
                     QApplication::setOverrideCursor(Qt::WaitCursor);
                     m_mediaBackendKar.play();
@@ -1358,8 +1414,12 @@ void MainWindow::play(const QString &karaokeFilePath, const bool &k2k) {
             QFile::copy(audioFilename, m_mediaTempDir->path() + QDir::separator() + audTmpFile);
             m_mediaBackendKar.setMediaCdg(m_mediaTempDir->path() + QDir::separator() + cdgTmpFile,
                                           m_mediaTempDir->path() + QDir::separator() + audTmpFile);
-            if (!k2k)
-                m_mediaBackendBm.fadeOut(!m_settings.bmKCrossFade());
+            if (!k2k) {
+                if (spotifyUseForBreakMusic())
+                    fadeOutSpotify();
+                else
+                    m_mediaBackendBm.fadeOut(!m_settings.bmKCrossFade());
+            }
             QApplication::setOverrideCursor(Qt::WaitCursor);
             m_mediaBackendKar.play();
             QApplication::restoreOverrideCursor();
@@ -1372,8 +1432,12 @@ void MainWindow::play(const QString &karaokeFilePath, const bool &k2k) {
             m_logger->info("{} Playing temporary copy to avoid bad filename stuff w/ gstreamer: {}", m_loggingPrefix,
                            tmpFilePath.toStdString());
             m_mediaBackendKar.setMedia(tmpFilePath);
-            if (!k2k)
-                m_mediaBackendBm.fadeOut();
+            if (!k2k) {
+                if (spotifyUseForBreakMusic())
+                    fadeOutSpotify();
+                else
+                    m_mediaBackendBm.fadeOut();
+            }
             m_mediaBackendKar.play();
             m_mediaBackendKar.fadeInImmediate();
         }
@@ -1398,6 +1462,10 @@ void MainWindow::play(const QString &karaokeFilePath, const bool &k2k) {
 
 MainWindow::~MainWindow() {
     m_shuttingDown = true;
+    if (m_dbThread) {
+        m_dbThread->quit();
+        m_dbThread->wait();
+    }
     cdgWindow->stopTicker();
 #ifdef _MSC_VER
     timeEndPeriod(1);
@@ -1478,7 +1546,10 @@ void MainWindow::buttonStopClicked() {
     m_kAASkip = true;
     cdgWindow->showAlert(false);
     audioRecorder.stop();
-    if (m_settings.bmKCrossFade()) {
+    if (spotifyUseForBreakMusic()) {
+        fadeInSpotify();
+        m_mediaBackendKar.stop();
+    } else if (m_settings.bmKCrossFade()) {
         m_mediaBackendBm.fadeIn(false);
         m_mediaBackendKar.stop();
     } else {
@@ -1756,6 +1827,21 @@ void MainWindow::actionSettingsTriggered() {
     connect(settingsDialog, &DlgSettings::rotationDurationSettingsModified, this, &MainWindow::updateRotationDuration);
     connect(settingsDialog, &DlgSettings::requestServerIntervalChanged, &m_songbookApi, &OKJSongbookAPI::setInterval);
     connect(settingsDialog, &DlgSettings::shortcutsChanged, this, &MainWindow::shortcutsUpdated);
+    connect(settingsDialog, &DlgSettings::spotifyEnabledChanged, this, [this](bool enabled) {
+        int idx = ui->tabWidget->indexOf(m_spotifyTab);
+        if (enabled && idx == -1) {
+            ui->tabWidget->addTab(m_spotifyTab, "Spotify");
+            if (m_spotifyClient) {
+                m_spotifyClient->setEnabled(true);
+            }
+        } else if (!enabled && idx != -1) {
+            ui->tabWidget->removeTab(idx);
+            if (m_spotifyClient) {
+                m_spotifyClient->setEnabled(false);
+            }
+        }
+    });
+
     connect(settingsDialog, &DlgSettings::treatAllSingersAsRegsChanged, this, &MainWindow::treatAllSingersAsRegsChanged);
     connect(settingsDialog, &DlgSettings::enforceAspectRatioChanged, &m_mediaBackendKar, &MediaBackend::setEnforceAspectRatio);
     connect(settingsDialog, &DlgSettings::enforceAspectRatioChanged, &m_mediaBackendBm, &MediaBackend::setEnforceAspectRatio);
@@ -1933,7 +2019,11 @@ void MainWindow::karaokeMediaBackend_stateChanged(const MediaBackend::State &sta
         if (state == m_lastAudioState || m_k2kTransition)
             return;
         m_lastAudioState = state;
-        m_mediaBackendBm.fadeIn(false);
+        if (spotifyUseForBreakMusic()) {
+            fadeInSpotify();
+        } else {
+            m_mediaBackendBm.fadeIn(false);
+        }
         if (m_settings.karaokeAutoAdvance()) {
             m_logger->info("{}  - Karaoke Autoplay is enabled", m_loggingPrefix);
             if (m_kAASkip) {
@@ -3075,14 +3165,14 @@ void MainWindow::actionAboutTriggered() {
     text += "\n\nIncluded library info";
     text += "\n\nQt version: " + QString(QT_VERSION_STR);
     text += "\nLicense: GNU GPL v3";
-    text += "\n\nGStreamer version: " + QString::number(GST_VERSION_MAJOR) + '.' + QString::number(GST_VERSION_MINOR) + '.' + QString::number(GST_VERSION_MICRO);
+    text += "\n\nLibVLC version: " + QString(libvlc_get_version());
     text += "\nLicense: GNU LGPL v2.1";
     text += "\n\nspdlog version: " + QString::number(SPDLOG_VER_MAJOR) + '.' + QString::number(SPDLOG_VER_MINOR) + '.' + QString::number(SPDLOG_VER_PATCH);
     text += "\nLicense: MIT";
     text += "\n\nTagLib version: " + QString::number(TAGLIB_MAJOR_VERSION) + '.' + QString::number(TAGLIB_MINOR_VERSION) + '.' + QString::number(TAGLIB_PATCH_VERSION);
     text += "\nLicense: GNU LGPL v2.1";
-    text += "\n\nMiniZ version: " + QString(MZ_VERSION);
-    text += "\nLicense: MIT";
+    text += "\n\nlibzip version: " + QString(LIBZIP_VERSION);
+    text += "\nLicense: BSD-3-Clause";
     QMessageBox::about(this, title, text);
 }
 
@@ -3308,11 +3398,7 @@ void MainWindow::appFontChanged(const QFont &font) {
 
     setFont(font);
     QFontMetrics fm(m_settings.applicationFont());
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
     int cvwWidth = std::max(300, fm.horizontalAdvance("Total: 00:00  Current:00:00  Remain: 00:00"));
-#else
-    int cvwWidth = std::max(300, fm.width("Total: 00:00  Current:00:00  Remain: 00:00"));
-#endif
     m_logger->info("{} Resizing videoPreview to width: {}", m_loggingPrefix, cvwWidth);
     QSize mcbSize(fm.height(), fm.height());
     if (mcbSize.width() < 32) {
@@ -3404,11 +3490,7 @@ void MainWindow::autosizeBmViews() {
 
     int fH = QFontMetrics(m_settings.applicationFont()).height();
     int iconWidth = fH + fH;
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
     int durationColSize = QFontMetrics(m_settings.applicationFont()).horizontalAdvance("Duration") + fH;
-#else
-    int durationColSize = QFontMetrics(m_settings.applicationFont()).width("Duration") + fH;
-#endif
     // 4 = filename 1 = metadata artist 2 = metadata title
 
     int artistColSize = 0;
@@ -3870,7 +3952,6 @@ void MainWindow::actionVideoLargeTriggered() {
 }
 
 void MainWindow::actionKaraokeTorture() {
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 10, 0))
     connect(&m_timerTest, &QTimer::timeout, [&]() {
         QApplication::beep();
         static int runs = 0;
@@ -3904,11 +3985,9 @@ void MainWindow::actionKaraokeTorture() {
         ui->labelSinger->setText("Torture run (" + QString::number(++runs) + ")");
     });
     m_timerTest.start(4000);
-#endif
 }
 
 void MainWindow::actionKAndBTorture() {
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 10, 0))
     connect(&m_timerTest, &QTimer::timeout, [&]() {
         QApplication::beep();
         static bool playing = false;
@@ -3950,11 +4029,9 @@ void MainWindow::actionKAndBTorture() {
         playing = true;
     });
     m_timerTest.start(2000);
-#endif
 }
 
 void MainWindow::actionBurnIn() {
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 10, 0))
     m_testMode = true;
     emit ui->buttonClearRotation->clicked();
     for (auto i = 0; i < 21; i++) {
@@ -3999,11 +4076,9 @@ void MainWindow::actionBurnIn() {
         m_logger->info("{} Burn in test cycle: {}", m_loggingPrefix, ++runs);
     });
     m_timerTest.start(3000);
-#endif
 }
 
 void MainWindow::actionPreviewBurnIn() {
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 10, 0))
     m_testMode = true;
     connect(&m_timerTest, &QTimer::timeout, [&]() {
         QApplication::beep();
@@ -4025,11 +4100,9 @@ void MainWindow::actionPreviewBurnIn() {
         m_logger->info("{} Preview burn-in test cycle: {}", m_loggingPrefix, ++runs);
     });
     m_timerTest.start(3250);
-#endif
 }
 
 void MainWindow::actionCdgDecodeTorture() {
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 10, 0))
     connect(&m_timerTest, &QTimer::timeout, [&]() {
         QApplication::beep();
         static int runs = 0;
@@ -4110,7 +4183,6 @@ void MainWindow::actionCdgDecodeTorture() {
         ui->labelSinger->setText("Torture run (" + QString::number(++runs) + ")");
     });
     m_timerTest.start(2000);
-#endif
 }
 
 void MainWindow::writeGstPipelineDiagramToDisk() {
@@ -4333,7 +4405,6 @@ void MainWindow::resetBmLabels() {
 }
 
 void MainWindow::actionBurnInEosJump() {
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 10, 0))
     m_testMode = true;
     emit ui->buttonClearRotation->clicked();
     for (auto i = 0; i < 21; i++) {
@@ -4380,7 +4451,6 @@ void MainWindow::actionBurnInEosJump() {
         ui->labelSinger->setText("Torture run (" + QString::number(runs) + ")");
     });
     m_timerTest.start(13000);
-#endif
 }
 
 void MainWindow::showAddSingerDialog() {
@@ -4396,6 +4466,61 @@ void MainWindow::showAddSingerDialog() {
         dlgAddSinger->show();
     } else
         dlgAddSinger->raise();
+}
+
+void MainWindow::fadeOutSpotify() {
+    if (!m_spotifyClient) return;
+
+    m_spotifyFadeTimer.disconnect();
+    
+    QSettings settings;
+    // Get current volume from Spotify to know where to start fading from
+    m_spotifyFadeCurrentVol = settings.value("spotify/last_volume", 75).toInt();
+    if (m_spotifyFadeCurrentVol <= 0) m_spotifyFadeCurrentVol = 75;
+    
+    connect(&m_spotifyFadeTimer, &QTimer::timeout, this, [this]() {
+        m_spotifyFadeCurrentVol -= 20;
+        if (m_spotifyFadeCurrentVol <= 0) {
+            m_spotifyFadeCurrentVol = 0;
+            m_spotifyFadeTimer.stop();
+            m_spotifyClient->setVolume(0);
+            m_spotifyClient->pause();
+        } else {
+            m_spotifyClient->setVolume(m_spotifyFadeCurrentVol);
+        }
+    });
+    m_spotifyFadeTimer.start(600); // 5 steps over 3 seconds
+}
+
+void MainWindow::fadeInSpotify() {
+    if (!m_spotifyClient) return;
+
+    m_spotifyFadeTimer.disconnect();
+    
+    m_spotifyFadeCurrentVol = 0;
+    
+    QSettings settings;
+    m_spotifyFadeTargetVol = settings.value("spotify/last_volume", 75).toInt();
+    if (m_spotifyFadeTargetVol <= 0) m_spotifyFadeTargetVol = 75;
+    
+    m_spotifyClient->play();
+    m_spotifyClient->setVolume(0);
+    
+    connect(&m_spotifyFadeTimer, &QTimer::timeout, this, [this]() {
+        m_spotifyFadeCurrentVol += 20;
+        if (m_spotifyFadeCurrentVol >= m_spotifyFadeTargetVol) {
+            m_spotifyFadeCurrentVol = m_spotifyFadeTargetVol;
+            m_spotifyFadeTimer.stop();
+        }
+        m_spotifyClient->setVolume(m_spotifyFadeCurrentVol);
+    });
+    m_spotifyFadeTimer.start(600); // 5 steps over 3 seconds
+}
+
+bool MainWindow::spotifyUseForBreakMusic() const {
+    if (!m_settings.spotifyEnabled()) return false;
+    QSettings settings;
+    return settings.value("spotify/use_for_break_music", false).toBool();
 }
 
 

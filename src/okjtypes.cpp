@@ -36,148 +36,15 @@ std::ostream & operator<<(std::ostream& os, const okj::RotationSinger& s)
         << ")";
 }
 
+std::ostream & operator<<(std::ostream& os, const QString& s)
+{
+    return os << s.toStdString();
+}
+
 
 namespace okj {
 
-    QString RotationSinger::nextSongPath() const {
-        QSqlQuery query;
-        query.prepare(
-                "SELECT dbsongs.path FROM dbsongs,queuesongs WHERE queuesongs.singer = :singerid AND queuesongs.played = 0 AND dbsongs.songid = queuesongs.song ORDER BY position LIMIT 1");
-        query.bindValue(":singerid", id);
-        query.exec();
-        if (auto lastError = query.lastError(); lastError.type() != QSqlError::NoError)
-            m_logger->error("{} DB error! Error while querying the db on disk! Error: {}", loggingPrefix(),
-                            lastError.text().toStdString());
-        if (query.first())
-            return query.value(0).toString();
-        return {};
-    }
 
-    QString RotationSinger::nextSongArtist() const {
-        QSqlQuery query;
-        query.prepare(
-                "SELECT dbsongs.artist FROM dbsongs,queuesongs WHERE queuesongs.singer = :singerid AND queuesongs.played = 0 AND dbsongs.songid = queuesongs.song ORDER BY position LIMIT 1");
-        query.bindValue(":singerid", id);
-        query.exec();
-        if (auto lastError = query.lastError(); lastError.type() != QSqlError::NoError)
-            m_logger->error("{} DB error! Error while querying the db on disk! Error: {}", loggingPrefix(),
-                            lastError.text().toStdString());
-        if (query.first())
-            return query.value(0).toString();
-        return {};
-    }
-
-    QString RotationSinger::nextSongTitle() const {
-        QSqlQuery query;
-        query.prepare(
-                "SELECT dbsongs.title FROM dbsongs,queuesongs WHERE queuesongs.singer = :singerid AND queuesongs.played = 0 AND dbsongs.songid = queuesongs.song ORDER BY position LIMIT 1");
-        query.bindValue(":singerid", id);
-        query.exec();
-        if (auto lastError = query.lastError(); lastError.type() != QSqlError::NoError)
-            m_logger->error("{} DB error! Error while querying the db on disk! Error: {}", loggingPrefix(),
-                            lastError.text().toStdString());
-        if (query.first())
-            return query.value(0).toString();
-        return {};
-    }
-
-    QString RotationSinger::nextSongArtistTitle() const {
-        QSqlQuery query;
-        query.prepare(
-                "SELECT dbsongs.artist, dbsongs.title FROM dbsongs,queuesongs WHERE queuesongs.singer = :singerid AND queuesongs.played = 0 AND dbsongs.songid = queuesongs.song ORDER BY position LIMIT 1");
-        query.bindValue(":singerid", id);
-        query.exec();
-        if (auto lastError = query.lastError(); lastError.type() != QSqlError::NoError)
-            m_logger->error("{} DB error! Error while querying the db on disk! Error: {}", loggingPrefix(),
-                            lastError.text().toStdString());
-        if (query.first())
-            return query.value(0).toString() + " - " + query.value(1).toString();
-        return " - empty - ";
-    }
-
-    QString RotationSinger::nextSongSongId() const {
-        QSqlQuery query;
-        query.prepare(
-                "SELECT dbsongs.discid FROM dbsongs,queuesongs WHERE queuesongs.singer = :singerid AND queuesongs.played = 0 AND dbsongs.songid = queuesongs.song ORDER BY position LIMIT 1");
-        query.bindValue(":singerid", id);
-        query.exec();
-        if (auto lastError = query.lastError(); lastError.type() != QSqlError::NoError)
-            m_logger->error("{} DB error! Error while querying the db on disk! Error: {}", loggingPrefix(),
-                            lastError.text().toStdString());
-        if (query.first())
-            return query.value(0).toString();
-        return {};
-    }
-
-    int RotationSinger::nextSongDurationSecs() const {
-        QSqlQuery query;
-        query.prepare(
-                "SELECT dbsongs.duration FROM dbsongs,queuesongs WHERE queuesongs.singer = :singerid AND queuesongs.played = 0 AND dbsongs.songid = queuesongs.song ORDER BY position LIMIT 1");
-        query.bindValue(":singerid", id);
-        query.exec();
-        if (auto lastError = query.lastError(); lastError.type() != QSqlError::NoError)
-            m_logger->error("{} DB error! Error while querying the db on disk! Error: {}", loggingPrefix(),
-                            lastError.text().toStdString());
-        if (query.first())
-            return (query.value(0).toInt() / 1000) + m_settings->estimationSingerPad();
-        else if (!m_settings->estimationSkipEmptySingers())
-            return m_settings->estimationEmptySongLength() + m_settings->estimationSingerPad();
-        return 0;
-    }
-
-    int RotationSinger::nextSongKeyChg() const {
-        QSqlQuery query;
-        query.prepare(
-                "SELECT keychg FROM queuesongs WHERE singer = :singerid AND played = 0 ORDER BY position LIMIT 1");
-        query.bindValue(":singerid", id);
-        query.exec();
-        if (auto lastError = query.lastError(); lastError.type() != QSqlError::NoError)
-            m_logger->error("{} DB error! Error while querying the db on disk! Error: {}", loggingPrefix(),
-                            lastError.text().toStdString());
-        if (query.first())
-            return query.value(0).toInt();
-        return 0;
-    }
-
-    int RotationSinger::nextSongQueueId() const {
-        QSqlQuery query;
-        query.prepare(
-                "SELECT qsongid FROM queuesongs WHERE singer = :singerid AND played = 0 ORDER BY position LIMIT 1");
-        query.bindValue(":singerid", id);
-        query.exec();
-        if (auto lastError = query.lastError(); lastError.type() != QSqlError::NoError)
-            m_logger->error("{} DB error! Error while querying the db on disk! Error: {}", loggingPrefix(),
-                            lastError.text().toStdString());
-        if (query.first())
-            return query.value(0).toInt();
-        return -1;
-    }
-
-    int RotationSinger::numSongsSung() const {
-        QSqlQuery query;
-        query.prepare("SELECT COUNT(qsongid) FROM queuesongs WHERE singer = :singerid AND played = true");
-        query.bindValue(":singerid", id);
-        query.exec();
-        if (auto lastError = query.lastError(); lastError.type() != QSqlError::NoError)
-            m_logger->error("{} DB error! Error while querying the db on disk! Error: {}", loggingPrefix(),
-                            lastError.text().toStdString());
-        if (query.first())
-            return query.value(0).toInt();
-        return -1;
-    }
-
-    int RotationSinger::numSongsUnsung() const {
-        QSqlQuery query;
-        query.prepare("SELECT COUNT(qsongid) FROM queuesongs WHERE singer = :singerid AND played = false");
-        query.bindValue(":singerid", id);
-        query.exec();
-        if (auto lastError = query.lastError(); lastError.type() != QSqlError::NoError)
-            m_logger->error("{} DB error! Error while querying the db on disk! Error: {}", loggingPrefix(),
-                            lastError.text().toStdString());
-        if (query.first())
-            return query.value(0).toInt();
-        return -1;
-    }
 
     RotationSinger::RotationSinger() {
         m_logger = spdlog::get("logger");

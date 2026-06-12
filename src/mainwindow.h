@@ -43,6 +43,7 @@
 #include "src/models/tablemodelqueuesongs.h"
 #include "src/models/tablemodelrotation.h"
 #include "src/models/tablemodelbreaksongs.h"
+#include "databaseworker.h"
 #include "src/models/tablemodelplaylistsongs.h"
 #include "bmdbdialog.h"
 #include <QShortcut>
@@ -59,6 +60,9 @@
 #include "src/models/tablemodelhistorysongs.h"
 #include "src/models/tablemodelplaylistsongs.h"
 #include "src/models/tablemodelqueuesongs.h"
+#include "spotifyauthcontroller.h"
+#include "spotifyclient.h"
+#include "spotifytab.h"
 #include <spdlog/async_logger.h>
 #include <memory>
 #include <random>
@@ -160,6 +164,21 @@ private:
     OKJSongbookAPI m_songbookApi;
     QWidget *m_historyTabWidget;
     std::mt19937_64 rng;
+    QThread *m_dbThread{nullptr};
+    DatabaseWorker *m_dbWorker{nullptr};
+
+    // Spotify Integration
+    SpotifyAuthController *m_spotifyAuth{nullptr};
+    SpotifyClient *m_spotifyClient{nullptr};
+    SpotifyTab *m_spotifyTab{nullptr};
+    QTimer m_spotifyFadeTimer;
+    int m_spotifyFadeTargetVol{0};
+    int m_spotifyFadeCurrentVol{0};
+    bool m_isFadingSpotify{false};
+
+    void fadeOutSpotify();
+    void fadeInSpotify();
+    bool spotifyUseForBreakMusic() const;
 
     void updateIcons();
     void setupShortcuts();

@@ -21,7 +21,6 @@
 #include "dlgsettings.h"
 #include "ui_dlgsettings.h"
 #include <QGuiApplication>
-#include <QDesktopWidget>
 #include <QFontDialog>
 #include <QColorDialog>
 #include <QFileDialog>
@@ -213,6 +212,7 @@ DlgSettings::DlgSettings(MediaBackend &AudioBackend, MediaBackend &BmAudioBacken
     ui->cbxSongInterruptionWarning->setChecked(m_settings.showSongInterruptionWarning());
     ui->cbxBmAutostart->setChecked(m_settings.bmAutoStart());
     ui->cbxIgnoreApos->setChecked(m_settings.ignoreAposInSearch());
+    ui->cbxSpotifyEnabled->setChecked(m_settings.spotifyEnabled());
     ui->spinBoxVideoOffset->setValue(m_settings.videoOffsetMs());
     ui->cbxStopPauseWarning->setChecked(m_settings.showSongPauseStopWarning());
     ui->cbxCheckUpdates->setChecked(m_settings.checkUpdates());
@@ -256,6 +256,8 @@ DlgSettings::DlgSettings(MediaBackend &AudioBackend, MediaBackend &BmAudioBacken
             &QCheckBox::setChecked);
     connect(&m_settings, &Settings::showSongStopPauseWarningChanged, ui->cbxStopPauseWarning, &QCheckBox::setChecked);
     connect(ui->cbxIgnoreApos, &QCheckBox::toggled, &m_settings, &Settings::setIgnoreAposInSearch);
+    connect(ui->cbxSpotifyEnabled, &QCheckBox::toggled, &m_settings, &Settings::setSpotifyEnabled);
+    connect(ui->cbxSpotifyEnabled, &QCheckBox::toggled, this, &DlgSettings::spotifyEnabledChanged);
     connect(ui->cbxCrossFade, &QCheckBox::toggled, &m_settings, &Settings::setBmKCrossfade);
     connect(ui->cbxCheckUpdates, &QCheckBox::toggled, &m_settings, &Settings::setCheckUpdates);
     connect(ui->comboBoxUpdateBranch, qOverload<int>(&QComboBox::currentIndexChanged), &m_settings,
@@ -587,17 +589,19 @@ void DlgSettings::on_checkBoxDownmixBm_toggled(bool checked) {
     emit audioDownmixChangedBm(checked);
 }
 
-void DlgSettings::on_comboBoxDevice_currentIndexChanged(const QString &arg1) {
-    if (!m_pageSetupDone)
+void DlgSettings::on_comboBoxDevice_currentIndexChanged(int index) {
+    if (!m_pageSetupDone || index < 0)
         return;
-    m_settings.setRecordingInput(arg1);
+    QString val = ui->comboBoxDevice->itemText(index);
+    m_settings.setRecordingInput(val);
 }
 
-void DlgSettings::on_comboBoxCodec_currentIndexChanged(const QString &arg1) {
-    if (!m_pageSetupDone)
+void DlgSettings::on_comboBoxCodec_currentIndexChanged(int index) {
+    if (!m_pageSetupDone || index < 0)
         return;
-    m_settings.setRecordingCodec(arg1);
-    if (arg1 == "audio/mpeg")
+    QString val = ui->comboBoxCodec->itemText(index);
+    m_settings.setRecordingCodec(val);
+    if (val == "audio/mpeg")
         m_settings.setRecordingRawExtension("mp3");
 }
 

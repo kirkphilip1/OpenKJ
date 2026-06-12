@@ -1851,6 +1851,13 @@ For example, searching for &quot;im&quot; will find songs that contain &quot;I'm
                     </widget>
                    </item>
                    <item>
+                    <widget class="QCheckBox" name="cbxSpotifyEnabled">
+                     <property name="text">
+                      <string>Enable Spotify integration</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
                     <layout class="QHBoxLayout" name="horizontalLayout_14">
                      <property name="topMargin">
                       <number>0</number>

@@ -91,9 +91,17 @@ signals:
     void filesDroppedOnSinger(QList<QUrl> urls, int singerId, int position);
     void qSongsMoved(int startRow, int startCol, int endRow, int endCol);
 
+    void requestLoadQueue(int singerId);
+    void requestCommitQueue(int singerId, const QList<okj::QueueSong> &songs);
+    void requestSetQueueSongKey(int singerId, int qSongId, int semitones);
+    void requestSetQueueSongPlayed(int singerId, int qSongId, bool played);
+    void requestRemoveAllQueueSongs(int singerId);
+    void requestAddSongToQueue(int singerId, int songId, int keyChange, int position);
+
 public slots:
     void songAddSlot(int songId, int singerId, int keyChg = 0);
     void setFont(const QFont &font);
+    void onQueueLoaded(const QList<okj::QueueSong> &songs);
 
 
 };

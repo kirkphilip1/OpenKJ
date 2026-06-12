@@ -93,9 +93,9 @@ QVariant TableModelQueueSongs::data(const QModelIndex &index, int role) const {
 QVariant TableModelQueueSongs::getColumnTextAlignmentRoleData(int column) {
     switch (column) {
         case COL_KEY:
-            return Qt::AlignHCenter + Qt::AlignVCenter;
+            return static_cast<int>(Qt::AlignHCenter | Qt::AlignVCenter);
         case COL_DURATION:
-            return Qt::AlignRight + Qt::AlignVCenter;
+            return static_cast<int>(Qt::AlignRight | Qt::AlignVCenter);
         default:
             return {};
     }
@@ -134,40 +134,19 @@ QVariant TableModelQueueSongs::getItemDisplayRoleData(const QModelIndex &index) 
 }
 
 void TableModelQueueSongs::loadSinger(const int singerId) {
-    m_logger->debug("{} loadSinger({}) fired", m_loggingPrefix, singerId);
+    m_logger->debug("{} loadSinger({}) requesting data from background DatabaseWorker", m_loggingPrefix, singerId);
+    m_curSingerId = singerId;
+    emit requestLoadQueue(singerId);
+}
+
+void TableModelQueueSongs::onQueueLoaded(const QList<okj::QueueSong> &songs) {
     emit layoutAboutToBeChanged();
     m_songs.clear();
-    m_songs.shrink_to_fit();
-    m_curSingerId = singerId;
-    QSqlQuery query;
-    query.prepare("SELECT queuesongs.qsongid, queuesongs.singer, queuesongs.song, queuesongs.played, "
-                  "queuesongs.keychg, queuesongs.position, rotationsingers.name, dbsongs.artist, "
-                  "dbsongs.title, dbsongs.discid, dbsongs.duration, dbsongs.path FROM queuesongs "
-                  "INNER JOIN rotationsingers ON rotationsingers.singerid = queuesongs.singer "
-                  "INNER JOIN dbsongs ON dbsongs.songid = queuesongs.song WHERE queuesongs.singer = :singerId "
-                  "ORDER BY queuesongs.position");
-    query.bindValue(":singerId", singerId);
-    query.exec();
-    if (auto error = query.lastError(); error.type() != QSqlError::NoError)
-        m_logger->error("{} DB error: {}", m_loggingPrefix, error.text());
-    else
-        m_logger->debug("{} Query returned {} rows", m_loggingPrefix, query.size());
-    while (query.next()) {
-        m_songs.emplace_back(okj::QueueSong{
-                query.value(0).toInt(),
-                query.value(1).toInt(),
-                query.value(2).toInt(),
-                query.value(3).toBool(),
-                query.value(4).toInt(),
-                query.value(5).toInt(),
-                query.value(7).toString(),
-                query.value(8).toString(),
-                query.value(9).toString(),
-                query.value(10).toInt(),
-                query.value(11).toString()
-        });
+    for (const auto &song : songs) {
+        m_songs.push_back(song);
     }
     emit layoutChanged();
+    emit queueModified(m_curSingerId);
 }
 
 int TableModelQueueSongs::getPosition(const int songId) {
@@ -282,69 +261,45 @@ void TableModelQueueSongs::remove(const int songId) {
 }
 
 void TableModelQueueSongs::setKey(const int songId, const int semitones) {
-    QSqlQuery query;
-    query.prepare("UPDATE queuesongs SET keychg = :key WHERE qsongid = :id");
-    query.bindValue(":id", songId);
-    query.bindValue(":key", semitones);
-    query.exec();
     auto it = std::find_if(m_songs.begin(), m_songs.end(), [&songId](okj::QueueSong &song) {
         return (song.id == songId);
     });
-    if (it == m_songs.end())
-        return;
-    it->keyChange = semitones;
-    emit dataChanged(this->index(it->position, COL_KEY), this->index(it->position, COL_KEY),
-                     QVector<int>{Qt::DisplayRole});
+    if (it != m_songs.end()) {
+        it->keyChange = semitones;
+        emit dataChanged(this->index(it->position, COL_KEY), this->index(it->position, COL_KEY),
+                         QVector<int>{Qt::DisplayRole});
+    }
+    emit requestSetQueueSongKey(m_curSingerId, songId, semitones);
 }
 
 void TableModelQueueSongs::setPlayed(const int songId, const bool played) {
     m_logger->debug("{} Setting songId {} to played", m_loggingPrefix, songId);
-    QSqlQuery query;
-    query.prepare("UPDATE queuesongs SET played = :played WHERE qsongid = :id");
-    query.bindValue(":id", songId);
-    query.bindValue(":played", played);
-    query.exec();
     auto it = std::find_if(m_songs.begin(), m_songs.end(), [&songId](okj::QueueSong &song) {
         return (song.id == songId);
     });
-    if (it == m_songs.end())
-        return;
-    it->played = played;
-    emit dataChanged(this->index(it->position, 0), this->index(it->position, columnCount() - 1),
-                     QVector<int>{Qt::FontRole, Qt::BackgroundRole, Qt::ForegroundRole});
-    emit queueModified(m_curSingerId);
+    if (it != m_songs.end()) {
+        it->played = played;
+        emit dataChanged(this->index(it->position, 0), this->index(it->position, columnCount() - 1),
+                         QVector<int>{Qt::FontRole, Qt::BackgroundRole, Qt::ForegroundRole});
+    }
+    emit requestSetQueueSongPlayed(m_curSingerId, songId, played);
 }
 
 void TableModelQueueSongs::removeAll() {
     emit layoutAboutToBeChanged();
-    QSqlQuery query;
-    query.prepare("DELETE FROM queuesongs WHERE singer = :singerId");
-    query.bindValue(":singerId", m_curSingerId);
-    query.exec();
     m_songs.clear();
     m_songs.shrink_to_fit();
     emit layoutChanged();
     emit queueModified(m_curSingerId);
+    emit requestRemoveAllQueueSongs(m_curSingerId);
 }
 
 void TableModelQueueSongs::commitChanges() {
-    QSqlQuery query;
-    query.exec("BEGIN TRANSACTION");
-    query.prepare("DELETE FROM queuesongs WHERE singer = :singerId");
-    query.bindValue(":singerId", m_curSingerId);
-    query.exec();
-    query.prepare("INSERT INTO queuesongs (qsongid,singer,song,artist,title,discid,path,keychg,played,position) "
-                  "VALUES(:id,:singerId,:songId,:songId,:songId,:songId,:songId,:key,:played,:position)");
-    std::for_each(m_songs.begin(), m_songs.end(), [&](okj::QueueSong &song) {
-        query.bindValue(":id", song.id);
-        query.bindValue(":singerId", song.singerId);
-        query.bindValue(":songId", song.dbSongId);
-        query.bindValue(":key", song.keyChange);
-        query.bindValue(":played", song.played);
-        query.bindValue(":position", song.position);
-        query.exec();
-    });
-    query.exec("COMMIT");
+    QList<okj::QueueSong> list;
+    for (const auto &song : m_songs) {
+        list.append(song);
+    }
+    emit requestCommitQueue(m_curSingerId, list);
 }
 
 void TableModelQueueSongs::songAddSlot(int songId, int singerId, int keyChg) {
@@ -352,26 +307,7 @@ void TableModelQueueSongs::songAddSlot(int songId, int singerId, int keyChg) {
         int queueSongId = add(songId);
         setKey(queueSongId, keyChg);
     } else {
-        int newPos{0};
-        okj::KaraokeSong ksong = m_karaokeSongsModel.getSong(songId);
-        QSqlQuery query;
-        query.prepare("SELECT COUNT(qsongid) FROM queuesongs WHERE singer = :singerId");
-        query.bindValue(":singerId", singerId);
-        query.exec();
-        if (auto error = query.lastError(); error.type() != QSqlError::NoError)
-            m_logger->error("{} DB error: {}", m_loggingPrefix, error.text());
-        if (query.first())
-            newPos = query.value(0).toInt();
-        query.prepare("INSERT INTO queuesongs (singer,song,artist,title,discid,path,keychg,played,position) "
-                      "VALUES (:singerId,:songId,:songId,:songId,:songId,:songId,:key,:played,:position)");
-        query.bindValue(":singerId", singerId);
-        query.bindValue(":songId", songId);
-        query.bindValue(":key", keyChg);
-        query.bindValue(":played", false);
-        query.bindValue(":position", newPos);
-        query.exec();
-        if (auto error = query.lastError(); error.type() != QSqlError::NoError)
-            m_logger->error("{} DB error: {}", m_loggingPrefix, error.text());
+        emit requestAddSongToQueue(singerId, songId, keyChg, 0);
     }
 }
 

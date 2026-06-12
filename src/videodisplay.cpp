@@ -31,31 +31,40 @@ void VideoDisplay::setHasActiveVideo(const bool &value)
 {
     if (m_hasActiveVideo != value)
     {
-        if (value)
-        {
-            // Switching to having video.
-            // Make sure the background is painted black initially to prevent
-            // any old buffer from "bleeding though" when in HW mode.
-            m_repaintBackgroundOnce = true;
-        }
         m_hasActiveVideo = value;
+        if (!m_hasActiveVideo)
+        {
+            m_currentFrame = QImage();
+        }
         update();
     }
+}
+
+void VideoDisplay::updateFrame(const QImage &image)
+{
+    m_currentFrame = image;
+    m_hasActiveVideo = true;
+    update();
+}
+
+void VideoDisplay::clearFrame()
+{
+    m_currentFrame = QImage();
+    m_hasActiveVideo = false;
+    update();
 }
 
 void VideoDisplay::paintEvent(QPaintEvent *event)
 {
     QPainter painter(this);
 
-    if (m_hasActiveVideo)
+    if (m_hasActiveVideo && !m_currentFrame.isNull())
     {
-        // playing - fix black bars in hw mode (event is not called in sw mode when playing).
-        // (perhaps simplify all this by always using fillOnPaint. Performance should be measured though.)
-        if (m_fillOnPaint || m_repaintBackgroundOnce)
-        {
-            painter.fillRect(event->rect(), Qt::black);
-            m_repaintBackgroundOnce = false;
-        }
+        painter.fillRect(event->rect(), Qt::black);
+        QImage scaled = m_currentFrame.scaled(size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        int x = (width() - scaled.width()) / 2;
+        int y = (height() - scaled.height()) / 2;
+        painter.drawImage(x, y, scaled);
     }
     else
     {
@@ -64,9 +73,7 @@ void VideoDisplay::paintEvent(QPaintEvent *event)
         if (m_useDefaultBg)
         {
             QSvgRenderer renderer(QString(":icons/Icons/okjlogo.svg"));
-#if (QT_VERSION >= QT_VERSION_CHECK(5,15,0))
             renderer.setAspectRatioMode(Qt::KeepAspectRatio);
-#endif
             renderer.render(&painter);
         }
         else

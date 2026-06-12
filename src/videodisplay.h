@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QBoxLayout>
 #include <QResizeEvent>
+#include <QImage>
 
 class VideoDisplay : public QWidget
 {
@@ -14,6 +15,7 @@ private:
     bool m_hasActiveVideo { false };
     bool m_fillOnPaint { false };
     bool m_repaintBackgroundOnce { false };
+    QImage m_currentFrame;
 
 public:
     explicit VideoDisplay(QWidget *parent = nullptr);
@@ -26,6 +28,8 @@ public slots:
     void setBackground(const QPixmap &pixmap);
     void useDefaultBackground();
     void setHasActiveVideo(const bool &value);
+    void updateFrame(const QImage &image);
+    void clearFrame();
 
     /**
      * @brief Fill with black on paint event when video is playing.

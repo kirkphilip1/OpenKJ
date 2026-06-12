@@ -9,8 +9,8 @@ DirectoryMonitor::DirectoryMonitor(QObject *parent, QStringList pathsToWatch) : 
     m_scanTimer.setSingleShot(true);
     connect(&m_scanTimer, &QTimer::timeout, this, &DirectoryMonitor::scanPaths);
 
-    connect(&m_pathsEnumeratedWatcher, &QFutureWatcher<int>::finished, this, &DirectoryMonitor::directoriesEnumerated);
-    auto future = QtConcurrent::run(this, &DirectoryMonitor::enumeratePathsAsync, pathsToWatch);
+    connect(&m_pathsEnumeratedWatcher, &QFutureWatcher<QStringList>::finished, this, &DirectoryMonitor::directoriesEnumerated);
+    auto future = QtConcurrent::run(&DirectoryMonitor::enumeratePathsAsync, this, pathsToWatch);
     m_pathsEnumeratedWatcher.setFuture(future);
 }
 

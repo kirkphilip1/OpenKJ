@@ -71,16 +71,33 @@ namespace okj {
         RotationSinger& operator=(RotationSinger&& other) = default;
         RotationSinger& operator=(const RotationSinger& other) = default;
         [[nodiscard]] bool isValid() const { return valid; }
-        [[nodiscard]] QString nextSongPath() const;
-        [[nodiscard]] QString nextSongArtist() const;
-        [[nodiscard]] QString nextSongTitle() const;
-        [[nodiscard]] QString nextSongArtistTitle() const;
-        [[nodiscard]] QString nextSongSongId() const;
-        [[nodiscard]] int nextSongDurationSecs() const;
-        [[nodiscard]] int nextSongKeyChg() const;
-        [[nodiscard]] int nextSongQueueId() const;
-        [[nodiscard]] int numSongsSung() const;
-        [[nodiscard]] int numSongsUnsung() const;
+
+        // Cached fields
+        QString cachedNextSongPath;
+        QString cachedNextSongArtist;
+        QString cachedNextSongTitle;
+        QString cachedNextSongSongId;
+        int cachedNextSongDurationSecs{0};
+        int cachedNextSongKeyChg{0};
+        int cachedNextSongQueueId{-1};
+        int cachedNumSongsSung{0};
+        int cachedNumSongsUnsung{0};
+
+        [[nodiscard]] QString nextSongPath() const { return cachedNextSongPath; }
+        [[nodiscard]] QString nextSongArtist() const { return cachedNextSongArtist; }
+        [[nodiscard]] QString nextSongTitle() const { return cachedNextSongTitle; }
+        [[nodiscard]] QString nextSongArtistTitle() const {
+            if (cachedNextSongArtist.isEmpty() && cachedNextSongTitle.isEmpty()) {
+                return " - empty - ";
+            }
+            return cachedNextSongArtist + " - " + cachedNextSongTitle;
+        }
+        [[nodiscard]] QString nextSongSongId() const { return cachedNextSongSongId; }
+        [[nodiscard]] int nextSongDurationSecs() const { return cachedNextSongDurationSecs; }
+        [[nodiscard]] int nextSongKeyChg() const { return cachedNextSongKeyChg; }
+        [[nodiscard]] int nextSongQueueId() const { return cachedNextSongQueueId; }
+        [[nodiscard]] int numSongsSung() const { return cachedNumSongsSung; }
+        [[nodiscard]] int numSongsUnsung() const { return cachedNumSongsUnsung; }
     };
 
     struct QueueSong {

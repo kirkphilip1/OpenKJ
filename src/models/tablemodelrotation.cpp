@@ -206,138 +206,50 @@ QString TableModelRotation::getWaitTimeString(int totalWaitDuration) {
 }
 
 void TableModelRotation::loadData() {
-    m_logger->debug("{} loading rotation data from DB on disk", m_loggingPrefix);
-    emit layoutAboutToBeChanged();
-    m_singers.clear();
-    QSqlQuery query;
-    query.exec("SELECT singerid,name,position,regular,addts FROM rotationsingers ORDER BY position");
-    if (auto sqlError = query.lastError(); sqlError.type() != QSqlError::NoError)
-        m_logger->error("{} TableModelRotation - SQL error on load: {}", m_loggingPrefix,
-                        sqlError.text());
-    while (query.next()) {
-        m_singers.emplace_back(okj::RotationSinger{
-                query.value(0).toInt(),
-                query.value(1).toString(),
-                query.value(2).toInt(),
-                query.value(3).toBool(),
-                query.value(4).toDateTime()
-        });
-    }
-    emit layoutChanged();
-    m_logger->debug("{} loaded {} rotation singers", m_loggingPrefix, m_singers.size());
+    m_logger->debug("{} requesting rotation data from background DatabaseWorker", m_loggingPrefix);
+    emit requestLoadRotation();
 }
 
 void TableModelRotation::commitChanges() {
     m_logger->trace("{} [{}] Called", m_loggingPrefix, __func__);
-    auto st = std::chrono::high_resolution_clock::now();
-
-    m_logger->debug("{} Committing db changes to disk", m_loggingPrefix);
-    QSqlQuery query;
-    query.exec("BEGIN TRANSACTION");
-    query.exec("DELETE FROM rotationsingers");
-    query.prepare(
-            "INSERT INTO rotationsingers (singerid,name,position,regular,regularid,addts) VALUES(:singerid,:name,:pos,:regular,:regularid,:addts)");
-    for (const auto &singer: m_singers) {
-        query.bindValue(":singerid", singer.id);
-        query.bindValue(":name", singer.name);
-        query.bindValue(":pos", singer.position);
-        query.bindValue(":regular", singer.regular);
-        query.bindValue(":regularid", -1);
-        query.bindValue(":addts", singer.addTs);
-        query.exec();
+    m_logger->debug("{} requesting commit of rotation changes to DB", m_loggingPrefix);
+    QList<okj::RotationSinger> list;
+    for (const auto &singer : m_singers) {
+        list.append(singer);
     }
-    query.exec("COMMIT");
-    if (auto lastError = query.lastError(); lastError.type() != QSqlError::NoError)
-        m_logger->error("{} Commit error! Unable to write rotation changes to db on disk! Error: {}", m_loggingPrefix,
-                        lastError.text());
-    else
-        m_logger->debug("{} Commit completed successfully", m_loggingPrefix);
+    emit requestCommitRotation(list);
+}
 
-    m_logger->trace("{} [{}] finished in {}ms",
-                    m_loggingPrefix,
-                    __func__,
-                    std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - st).count()
-    );
+void TableModelRotation::onRotationLoaded(const QList<okj::RotationSinger> &singers) {
+    emit layoutAboutToBeChanged();
+    m_singers.clear();
+    for (const auto &singer : singers) {
+        m_singers.push_back(singer);
+    }
+    emit layoutChanged();
+    emit rotationModified();
+}
+
+void TableModelRotation::onSingerAdded(int singerId, const QString &name, int positionHint) {
+    int pos = -1;
+    for (size_t i = 0; i < m_singers.size(); ++i) {
+        if (m_singers[i].id == singerId) {
+            pos = static_cast<int>(i);
+            break;
+        }
+    }
+    emit newSingerAdded(pos);
 }
 
 int TableModelRotation::singerAdd(const QString &name, const int positionHint) {
-    m_logger->trace("{} [{}] Called with ({}, {})", m_loggingPrefix, __func__, name, positionHint);
-    auto st = std::chrono::high_resolution_clock::now();
+    m_logger->debug("{} requesting singer add: {} with positionHint {}", m_loggingPrefix, name, positionHint);
+    emit requestAddSinger(name, positionHint);
+    return -1;
+}
 
-    m_logger->debug("{} Adding singer {} to rotation using positionHint {}", m_loggingPrefix, name, positionHint);
-    auto curTs = QDateTime::currentDateTime();
-    int addPos = static_cast<int>(m_singers.size());
-    QSqlQuery query;
-    query.prepare(
-            "INSERT INTO rotationsingers (name,position,regular,regularid,addts) VALUES(:name,:pos,:regular,:regularid,:addts)");
-    query.bindValue(":name", name);
-    query.bindValue(":pos", addPos);
-    query.bindValue(":regular", false);
-    query.bindValue(":regularid", -1);
-    query.bindValue(":addts", curTs);
-    query.exec();
-    if (auto lastError = query.lastError(); lastError.type() != QSqlError::NoError)
-        m_logger->error(
-                "{} Commit error! Unable to write rotation changes to db on disk while adding singer! Error: {}",
-                m_loggingPrefix, lastError.text());
-    int singerId = query.lastInsertId().toInt();
-    if (m_singers.empty()) {
-        m_rotationTopSingerId = singerId;
-        m_settings.setLastRunRotationTopSingerId(singerId);
-    }
-    if (singerId == -1) {
-        m_logger->critical("{} Error occurred while inserting singer into the database singers table!!!",
-                           m_loggingPrefix);
-        return -1;
-    }
-    emit layoutAboutToBeChanged();
-    m_singers.emplace_back(okj::RotationSinger{
-            singerId,
-            name,
-            addPos,
-            false,
-            curTs
-    });
-    emit layoutChanged();
-    bool singerMoved{false};
-    int curSingerPos = getSinger(m_currentSingerId).position;
-    switch (positionHint) {
-        case ADD_FAIR: {
-            if (curSingerPos > 0 && !m_settings.rotationAltSortOrder()) {
-                singerMove(addPos, curSingerPos);
-                singerMoved = true;
-            }
-            break;
-        }
-        case ADD_NEXT:
-            if (curSingerPos != m_singers.size() - 2) {
-                singerMove(addPos, curSingerPos + 1);
-                singerMoved = true;
-            }
-            break;
-        case ADD_BOTTOM:
-            if (m_settings.rotationAltSortOrder()) {
-                if (auto rotTopSingerPos = getSinger(m_rotationTopSingerId).position; rotTopSingerPos > 0) {
-                    singerMove(addPos, rotTopSingerPos);
-                    singerMoved = true;
-                }
-            }
-        default:
-            break;
-    }
-
-    if (!singerMoved)
-        emit rotationModified();
-    m_logger->debug("{} Singer add completed", m_loggingPrefix);
-    outputRotationDebug();
-
-    m_logger->trace("{} [{}] finished in {}ms",
-                    m_loggingPrefix,
-                    __func__,
-                    std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - st).count()
-    );
-
-    return singerId;
+void TableModelRotation::singerAddWithSong(const QString &name, int positionHint, int songId, int keyChange, bool makeRegular) {
+    m_logger->debug("{} requesting singer add with song: {} with positionHint {}, songId {}, keyChange {}, makeRegular {}", m_loggingPrefix, name, positionHint, songId, keyChange, makeRegular);
+    emit requestAddSingerWithSong(name, positionHint, songId, keyChange, makeRegular);
 }
 
 void TableModelRotation::singerMove(const int oldPosition, const int newPosition, const bool skipCommit) {
@@ -407,16 +319,7 @@ void TableModelRotation::singerSetName(const int singerId, const QString &newNam
     it->name = newName;
     emit dataChanged(this->index(it->position, COL_NAME), this->index(it->position, COL_NAME),
                      QVector<int>{Qt::DisplayRole});
-    QSqlQuery query;
-    query.prepare("UPDATE rotationsingers SET name = :name WHERE singerid = :singerid");
-    query.bindValue(":name", newName);
-    query.bindValue(":singerid", singerId);
-    query.exec();
-    if (auto lastError = query.lastError(); lastError.type() != QSqlError::NoError)
-        m_logger->error("{} DB error! Unable to write rotation changes to db on disk! Error: {}", m_loggingPrefix,
-                        lastError.text());
-    emit rotationModified();
-    outputRotationDebug();
+    emit requestRenameSinger(singerId, newName);
 }
 
 void TableModelRotation::singerDelete(const int singerId) {
@@ -457,18 +360,12 @@ void TableModelRotation::singerSetRegular(const int singerId, const bool isRegul
     auto it = std::find_if(m_singers.begin(), m_singers.end(), [&singerId](okj::RotationSinger &singer) {
         return (singerId == singer.id);
     });
-    it->regular = isRegular;
-    emit dataChanged(this->index(it->position, COL_REGULAR), this->index(it->position, COL_REGULAR),
-                     QVector<int>{Qt::DisplayRole});
-    QSqlQuery query;
-    query.prepare("UPDATE rotationsingers SET regular = :regular WHERE singerid = :singerid");
-    query.bindValue(":regular", isRegular);
-    query.bindValue(":singerid", singerId);
-    query.exec();
-    if (auto lastError = query.lastError(); lastError.type() != QSqlError::NoError) {
-        m_logger->error("{} DB error! Unable to write rotation changes to db on disk! Error: {}", m_loggingPrefix,
-                        lastError.text());
+    if (it != m_singers.end()) {
+        it->regular = isRegular;
+        emit dataChanged(this->index(it->position, COL_REGULAR), this->index(it->position, COL_REGULAR),
+                         QVector<int>{Qt::DisplayRole});
     }
+    emit requestSetSingerRegular(singerId, isRegular);
 }
 
 void TableModelRotation::singerMakeRegular(const int singerId) {
@@ -520,20 +417,12 @@ int TableModelRotation::rotationDuration() const {
 void TableModelRotation::clearRotation() {
     m_logger->debug("{} Clearing rotation", m_loggingPrefix);
     emit layoutAboutToBeChanged();
-    QSqlQuery query;
-    query.exec("DELETE from queuesongs");
-    if (auto lastError = query.lastError(); lastError.type() != QSqlError::NoError)
-        m_logger->error("{} DB error! Error occurred while clearing the queuesongs db table on disk! Error: {}",
-                        m_loggingPrefix, lastError.text());
-    query.exec("DELETE FROM rotationsingers");
-    if (auto lastError = query.lastError(); lastError.type() != QSqlError::NoError)
-        m_logger->error("{} DB error! Error occurred while clearing the rotation singers db table on disk! Error: {}",
-                        m_loggingPrefix, lastError.text());
     m_singers.clear();
     m_settings.setCurrentRotationPosition(-1);
     m_currentSingerId = -1;
     emit layoutChanged();
     emit rotationModified();
+    emit requestClearRotation();
 }
 
 int TableModelRotation::currentSinger() const {

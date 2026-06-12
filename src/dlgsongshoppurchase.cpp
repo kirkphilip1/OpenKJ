@@ -7,6 +7,9 @@
 #include "settings.h"
 
 
+#include <QRegularExpressionValidator>
+#include <QRegularExpression>
+
 DlgSongShopPurchase::DlgSongShopPurchase(std::shared_ptr<SongShop> songShop, QWidget *parent) :
     QDialog(parent),
     shop(std::move(songShop)),
@@ -14,10 +17,10 @@ DlgSongShopPurchase::DlgSongShopPurchase(std::shared_ptr<SongShop> songShop, QWi
 {
     setupDone = false;
     ui->setupUi(this);
-    ui->lineEditCCN->setValidator(new QRegExpValidator(QRegExp("[0-9]*"), this));
-    ui->lineEditCCM->setValidator(new QRegExpValidator(QRegExp("[0-9]*"), this));
-    ui->lineEditCCY->setValidator(new QRegExpValidator(QRegExp("[0-9]*"), this));
-    ui->lineEditCCV->setValidator(new QRegExpValidator(QRegExp("[0-9]*"), this));
+    ui->lineEditCCN->setValidator(new QRegularExpressionValidator(QRegularExpression("[0-9]*"), this));
+    ui->lineEditCCM->setValidator(new QRegularExpressionValidator(QRegularExpression("[0-9]*"), this));
+    ui->lineEditCCY->setValidator(new QRegularExpressionValidator(QRegularExpression("[0-9]*"), this));
+    ui->lineEditCCV->setValidator(new QRegularExpressionValidator(QRegularExpression("[0-9]*"), this));
     knLoginTest = false;
     ui->cbxSaveAccount->setChecked(m_settings.saveKNAccount());
     ui->cbxSaveCard->setChecked(m_settings.saveCC());

@@ -26,8 +26,7 @@ void DlgAddSinger::addSinger() {
         QMessageBox::warning(this, "Missing required field", "You must enter a singer name.");
         return;
     }
-    int newSingerId = m_rotModel.singerAdd(ui->lineEditName->text(), ui->cbxPosition->currentIndex());
-    emit newSingerAdded(m_rotModel.getSinger(newSingerId).position);
+    m_rotModel.singerAdd(ui->lineEditName->text(), ui->cbxPosition->currentIndex());
     ui->lineEditName->clear();
     close();
 }

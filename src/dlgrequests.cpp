@@ -36,11 +36,7 @@ QString toMixedCase(const QString &s) {
         return {};
     if (s.size() < 1)
         return {};
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-    QStringList parts = s.split(" ", QString::SkipEmptyParts);
-#else
     QStringList parts = s.split(' ', Qt::SkipEmptyParts);
-#endif
     for (int i = 1; i < parts.size(); ++i)
         parts[i].replace(0, 1, parts[i][0].toUpper());
     QString newStr = parts.join(" ");
@@ -486,15 +482,9 @@ void DlgRequests::autoSizeViews() {
     ui->tableViewSearch->horizontalHeader()->setSectionResizeMode(TableModelKaraokeSongs::COL_LASTPLAY, QHeaderView::Interactive);
     ui->tableViewSearch->horizontalHeader()->setSectionResizeMode(TableModelKaraokeSongs::COL_PLAYS, QHeaderView::Interactive);
     ui->tableViewSearch->horizontalHeader()->setSectionResizeMode(TableModelKaraokeSongs::COL_DURATION, QHeaderView::Interactive);
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
     int tsWidth = QFontMetrics(m_settings.applicationFont()).horizontalAdvance(" 00/00/00 00:00 xx ");
     int keyWidth = QFontMetrics(m_settings.applicationFont()).horizontalAdvance("_Key_");
     int singerColSize = QFontMetrics(m_settings.applicationFont()).horizontalAdvance("_Isaac_Lightburn_");
-#else
-    int tsWidth = QFontMetrics(settings.applicationFont()).width(" 00/00/00 00:00 xx ");
-    int keyWidth = QFontMetrics(settings.applicationFont()).width("_Key_");
-    int singerColSize = QFontMetrics(settings.applicationFont()).width("_Isaac_Lightburn_");
-#endif
     qInfo() << "tsWidth = " << tsWidth;
     int delwidth = fH * 2;
     qInfo() << "singerColSize = " << singerColSize;

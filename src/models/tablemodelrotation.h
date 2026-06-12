@@ -97,6 +97,7 @@ public:
     void loadData();
     void commitChanges();
     int singerAdd(const QString& name, int positionHint = ADD_BOTTOM);
+    void singerAddWithSong(const QString &name, int positionHint, int songId, int keyChange, bool makeRegular = false);
     void singerMove(int oldPosition, int newPosition, bool skipCommit = false);
     void singerSetName(int singerId, const QString &newName);
     void singerDelete(int singerId);
@@ -130,10 +131,24 @@ private:
     [[nodiscard]] static QString getWaitTimeString(int totalWaitDuration);
 
 
+public slots:
+    void onRotationLoaded(const QList<okj::RotationSinger> &singers);
+    void onSingerAdded(int singerId, const QString &name, int positionHint);
+
 signals:
     void songDroppedOnSinger(int singerId, int songId, int dropRow);
     void rotationModified();
     void singersMoved(int startRow, int startCol, int endRow, int endCol);
+    void newSingerAdded(int position);
+
+    void requestLoadRotation();
+    void requestCommitRotation(const QList<okj::RotationSinger> &singers);
+    void requestAddSinger(const QString &name, int positionHint);
+    void requestAddSingerWithSong(const QString &name, int positionHint, int songId, int keyChange, bool makeRegular);
+    void requestRenameSinger(int singerId, const QString &newName);
+    void requestDeleteSinger(int singerId);
+    void requestSetSingerRegular(int singerId, bool isRegular);
+    void requestClearRotation();
 
 };
 

@@ -21,7 +21,6 @@
 #include "settings.h"
 #include <QCoreApplication>
 #include <QApplication>
-#include <QDesktopWidget>
 #include <QStandardPaths>
 #include <QCryptographicHash>
 #include <QDataStream>
@@ -362,7 +361,7 @@ Settings::Settings(QObject *parent) :
 #ifdef Q_OS_LINUX
     settings = new QSettings(this);
 #else
-    QDir khDir(QStandardPaths::writableLocation(QStandardPaths::DataLocation));
+    QDir khDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
     if (!khDir.exists())
     {
         khDir.mkpath(khDir.absolutePath());
@@ -1613,6 +1612,16 @@ bool Settings::bmKCrossFade()
     return settings->value("bmKCrossFade", true).toBool();
 }
 
+bool Settings::spotifyUseForBreakMusic() const
+{
+    return settings->value("spotify/use_for_break_music", false).toBool();
+}
+
+bool Settings::spotifyEnabled() const
+{
+    return settings->value("spotify/enabled", false).toBool();
+}
+
 bool Settings::requestRemoveOnRotAdd()
 {
     return settings->value("requestRemoveOnRotAdd", false).toBool();
@@ -1755,6 +1764,16 @@ void Settings::dbSetLazyLoadDurations(bool val)
 void Settings::setBmKCrossfade(bool enabled)
 {
     settings->setValue("bmKCrossFade", enabled);
+}
+
+void Settings::setSpotifyUseForBreakMusic(bool enabled)
+{
+    settings->setValue("spotify/use_for_break_music", enabled);
+}
+
+void Settings::setSpotifyEnabled(bool enabled)
+{
+    settings->setValue("spotify/enabled", enabled);
 }
 
 SfxEntry::SfxEntry()

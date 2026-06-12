@@ -1,52 +1,21 @@
-/*
- * Copyright (c) 2013-2020 Thomas Isaac Lightburn
- *
- *
- * This file is part of OpenKJ.
- *
- * OpenKJ is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
 #ifndef MEDIABACKEND_H
 #define MEDIABACKEND_H
 
-#define GLIB_DISABLE_DEPRECATION_WARNINGS
-#include <gst/gst.h>
-#include <gst/gstdevicemonitor.h>
-#include <gst/gstdevice.h>
-#include <gst/gstplugin.h>
-#include <gst/controller/gstinterpolationcontrolsource.h>
-#include <gst/controller/gstdirectcontrolbinding.h>
-#include <cdg/cdgappsrc.h>
-#include "settings.h"
-
+#include <QObject>
 #include <QTimer>
 #include <QThread>
 #include <QMutex>
 #include <QImage>
-#include "audiofader.h"
-#include "softwarerendervideosink.h"
 #include <QPointer>
+#include <QTemporaryDir>
 #include <memory>
-#include <array>
 #include <vector>
-#include "cdg/cdgfilereader.h"
+#include <atomic>
+#include <vlc/vlc.h>
 #include "settings.h"
-#include "gstreamer/gstreamerhelper.h"
+#include "audiofader.h"
+#include "videodisplay.h"
 #include <spdlog/spdlog.h>
-#include <spdlog/async_logger.h>
-#include <spdlog/fmt/ostr.h>
 
 std::ostream& operator<<(std::ostream& os, const QString& s);
 
@@ -62,6 +31,7 @@ class MediaBackend : public QObject
 public:
     std::string m_loggingPrefix;
     std::shared_ptr<spdlog::logger> m_logger;
+    
     enum MediaType {
         Karaoke,
         BackgroundMusic,
@@ -83,9 +53,8 @@ public:
     };
 
     struct AudioOutputDevice {
+        QString id;
         QString name;
-        GstDevice* gstDevice{nullptr};
-        size_t index{0};
     };
 
     explicit MediaBackend(QObject *parent, QString objectName, MediaType type);
@@ -96,7 +65,7 @@ public:
     static bool canPitchShift() { return true; }
     bool hasVideo() { return m_hasVideo; }
     bool isSilent();
-    void setAccelType(const accel &type=accel::XVideo) { m_accelMode = type; }
+    void setAccelType(const accel &type=accel::XVideo) {}
     void setAudioOutputDevice(const AudioOutputDevice &device);
     void setAudioOutputDevice(const QString &deviceName);
     void setVideoOutputWidgets(const std::vector<QWidget*>& surfaces);
@@ -104,14 +73,15 @@ public:
     [[nodiscard]] bool isVideoEnabled() const { return m_videoEnabled; }
     bool hasActiveVideo();
     [[nodiscard]] int getVolume() const { return m_volume; }
-    void forceVideoExpose();
+    void forceVideoExpose() {}
     QString getName() { return m_objName; }
-    void writePipelinesGraphToFile(const QString& filePath);
+    void writePipelinesGraphToFile(const QString& filePath) {}
 
     qint64 position();
     qint64 duration();
     State state();
     QStringList getOutputDevices();
+    
     static QString msToMMSS(const qint64 &msec)
     {
         QString sec;
@@ -130,113 +100,68 @@ public:
     }
 
 private:
-
-    struct VideoSinkData {
-        QWidget *surface { nullptr };
-        GstElement *videoSink { nullptr };
-        GstElement *videoScale { nullptr };
-        SoftwareRenderVideoSink *softwareRenderVideoSink { nullptr };
-    };
-
     QString m_objName;
     MediaType m_type;
     Settings m_settings;
-    GstBus *m_bus{nullptr};
 
-    /* PIPELINE */
-    GstElement *m_pipeline { nullptr };  // Pipeline
-    GstBin     *m_pipelineAsBin { nullptr };
-    GstElement *m_decoder { nullptr };
-    CdgAppSrc  *m_cdgSrc { nullptr };
+    // LibVLC player variables
+    libvlc_instance_t *m_vlcInstance{nullptr};
+    libvlc_media_player_t *m_vlcPlayer{nullptr};
+    libvlc_media_t *m_vlcMedia{nullptr};
 
-    PadInfo *m_audioSrcPad { nullptr };
-    PadInfo *m_videoSrcPad { nullptr };
+    // Video memory callbacks variables
+    QMutex m_videoMutex;
+    uchar *m_videoBuffer{nullptr};
+    size_t m_videoBufferSize{0};
+    unsigned int m_videoWidth{0};
+    unsigned int m_videoHeight{0};
+    unsigned int m_videoPitch{0};
+    std::atomic<bool> m_hasVideo{false};
+    bool m_videoEnabled{true};
+    bool m_fade{false};
 
-
-    /* AUDIO SINK */
-    GstElement *m_audioBin { nullptr }; // GstBin
-    GstElement *m_scaleTempo { nullptr };
-    GstElement *m_aConvEnd { nullptr };
-    GstElement *m_audioPanorama { nullptr };
-    GstElement *m_fltrPostPanorama { nullptr };
-    GstElement *m_pitchShifterRubberBand { nullptr };
-    GstElement *m_pitchShifterSoundtouch { nullptr };
-    GstElement *m_volumeElement { nullptr };
-    GstElement *m_faderVolumeElement { nullptr };
-    GstElement *m_equalizer { nullptr };
-    GstElement *m_audioSink { nullptr };
-    GstElement *m_prescalerCapsFilter { nullptr };
-    GstElement *m_queueMainVideo { nullptr };
-    GstElement *m_prescaler { nullptr };
-    GstElement *m_prescalerVideoConvert { nullptr };
-
-    GstCaps *m_audioCapsStereo { nullptr };
-    GstCaps *m_audioCapsMono { nullptr };
-
-    std::vector<AudioOutputDevice> m_audioOutputDevices;
-
-    std::array<int,10> m_eqLevels{0,0,0,0,0,0,0,0,0,0};
-
-
-    /* VIDEO SINK */
-    GstElement *m_videoBin { nullptr }; // GstBin
-    GstElement *m_videoTee { nullptr };
-
-    std::vector<VideoSinkData> m_videoSinks;
-
-    accel m_accelMode{XVideo};
-    int m_videoOffsetMs{0};
+    // Connected display widgets
+    QList<VideoDisplay*> m_videoSinks;
 
     QString m_filename;
     QString m_cdgFilename;
     QStringList m_outputDeviceNames;
-    QTimer m_gstBusMsgHandlerTimer;
-    QTimer m_timerFast;
-    QTimer m_timerSlow;
-    int m_silenceDuration{0};
-    long m_positionWatchdogLastPos{0};
+    std::vector<AudioOutputDevice> m_audioOutputDevices;
+    QTimer m_vlcEventTimer;
+    QPointer<AudioFader> m_fader{nullptr};
 
-    double m_playbackRate{1.0};
-    int m_volume{0};
-    int m_lastPosition{0};
-    AudioOutputDevice m_outputDevice;
-    double m_currentRmsLevel{0.0};
-    bool m_cdgMode{false};
-    bool m_fade{false};
-    bool m_currentlyFadedOut{false};
+    int m_volume{100};
+    bool m_muted{false};
+    int m_pitchShift{0};
+    int m_tempoPercent{100};
+    int m_mplxMode{Multiplex_Normal};
+    bool m_eqBypass{true};
+    std::array<int,10> m_eqLevels{0,0,0,0,0,0,0,0,0,0};
+
+    std::unique_ptr<QTemporaryDir> m_tempDir;
+    State m_state{StoppedState};
+
     bool m_silenceDetect{false};
-    bool m_videoEnabled{true};
-    bool m_bypass{false};
-    bool m_loadPitchShift;
-    bool m_downmix{false};
-    gboolean m_changingAudioOutputs{false};
-    std::atomic<bool> m_hasVideo{false};
-    bool m_videoAccelEnabled{false};
-    QPointer<AudioFader> m_fader;
-    std::atomic<GstState> m_currentState { GST_STATE_NULL };
+    bool m_silenceDetectedEmitted{false};
+    bool m_isMonoInitialized{false};
 
-    void buildPipeline();
-    void buildVideoSinkBin();
-    void buildAudioSinkBin();
-    void resetVideoSinks();
-    const char* getVideoSinkElementNameForFactory();
-    void getAudioOutputDevices();
-    void writePipelineGraphToFile(GstBin *bin, const QString& filePath, QString fileName);
-    static double getPitchForSemitone(const int &semitone);
+    void setupVlcCallbacks();
+    void updateVolume();
+    void updateAudioFilters();
+    void recreatePlayerIfNeeded();
 
-    void gstBusFunc(GstMessage *message);
-    static void padAddedToDecoder_cb(GstElement *element,  GstPad *pad, gpointer caller);
-    void stopPipeline();
-    void resetPipeline();
-    void patchPipelineSinks();
+    // Friend functions for callbacks
+    friend unsigned setup_cb(void **opaque, char *chroma, unsigned *width, unsigned *height, unsigned *pitches, unsigned *lines);
+    friend void cleanup_cb(void *opaque);
+    friend void* lock_cb(void *opaque, void **pixels);
+    friend void unlock_cb(void *opaque, void *picture, void *const *pixels);
+    friend void display_cb(void *opaque, void *picture);
 
 private slots:
-    void timerFast_timeout();
-    void timerSlow_timeout();
-
+    void eventTimer_timeout();
 
 public slots:
-    void setVideoOffset(int offsetMs);
+    void setVideoOffset(int offsetMs) {}
     void play();
     void pause();
     void setMedia(const QString &filename);
@@ -250,18 +175,19 @@ public slots:
     void setPitchShift(const int &pitchShift);
     void fadeOut(const bool &waitForFade = true);
     void fadeIn(const bool &waitForFade = true);
-    void setUseFader(const bool &fade) {m_fade = fade;}
-    void setUseSilenceDetection(const bool &enabled);
+    void setUseFader(const bool &fade) { m_fade = fade; }
+    void setUseSilenceDetection(const bool &enabled) { m_silenceDetect = enabled; }
     void setDownmix(const bool &enabled);
     void setTempo(const int &percent);
     void setMplxMode(const int &mode);
     void setEqBypass(const bool &m_bypass);
     void setEqLevel(const int &band, const int &level);
-    void fadeInImmediate();
-    void fadeOutImmediate();
-    void setEnforceAspectRatio(const bool &enforce);
+    void fadeInImmediate() { fadeIn(false); }
+    void fadeOutImmediate() { fadeOut(false); }
+    void setEnforceAspectRatio(const bool &enforce) {}
 
 signals:
+    void frameReady(const QImage &image);
     void audioAvailableChanged(const bool audioAvailable);
     void bufferStatusChanged(const int status);
     void durationChanged(const qint64 duration);
@@ -273,7 +199,6 @@ signals:
     void silenceDetected();
     void pitchChanged(const int key);
     void audioError(const QString &msg);
-
 };
 
 #endif // MEDIABACKEND_H

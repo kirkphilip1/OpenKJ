@@ -132,9 +132,9 @@ QVariant TableModelKaraokeSongs::getColumnTextAlignmentHint(int column) {
         case COL_DURATION:
         case COL_PLAYS:
         case COL_LASTPLAY:
-            return Qt::AlignRight + Qt::AlignVCenter;
+            return static_cast<int>(Qt::AlignRight | Qt::AlignVCenter);
         default:
-            return Qt::AlignLeft + Qt::AlignVCenter;
+            return static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter);
     }
 }
 
@@ -223,11 +223,7 @@ void TableModelKaraokeSongs::searchExec() {
     searchTerms.emplace_back(s.substr(prev_pos, pos - prev_pos));
     m_filteredSongs.clear();
     m_filteredSongs.reserve(m_allSongs.size());
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-    auto needles = m_lastSearch.split(' ', QString::SplitBehavior::SkipEmptyParts);
-#else
-    auto needles = m_lastSearch.split(' ', Qt::SplitBehavior(Qt::SkipEmptyParts));
-#endif
+    auto needles = m_lastSearch.split(' ', Qt::SkipEmptyParts);
     for (const auto &song : m_allSongs) {
         if (song->dropped)
             continue;

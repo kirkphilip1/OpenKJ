@@ -89,9 +89,7 @@ void DlgAddSong::pushButtonAddClicked()
         }
         else
         {
-            int singerId = m_rotModel.singerAdd(ui->lineEditNewSingerName->text(), ui->comboBoxPosition->currentIndex());
-            m_queueModel.songAddSlot(m_songId, singerId, ui->spinBoxKeyChange->value());
-            emit newSingerAdded(m_rotModel.getSinger(singerId).position);
+            m_rotModel.singerAddWithSong(ui->lineEditNewSingerName->text(), ui->comboBoxPosition->currentIndex(), m_songId, ui->spinBoxKeyChange->value(), false);
             close();
         }
         break;
@@ -143,10 +141,7 @@ void DlgAddSong::pushButtonAddClicked()
         }
         else
         {
-            int singerId = m_rotModel.singerAdd(ui->comboBoxRegSingers->currentText(), ui->comboBoxPosition->currentIndex());
-            m_rotModel.singerMakeRegular(singerId);
-            m_queueModel.songAddSlot(m_songId, singerId, ui->spinBoxKeyChange->value());
-            emit newSingerAdded(m_rotModel.getSinger(singerId).position);
+            m_rotModel.singerAddWithSong(ui->comboBoxRegSingers->currentText(), ui->comboBoxPosition->currentIndex(), m_songId, ui->spinBoxKeyChange->value(), true);
             close();
         }
         break;

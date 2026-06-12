@@ -20,12 +20,12 @@
 
 #include "dlgcdg.h"
 #include "ui_dlgcdg.h"
-#include <QDesktopWidget>
 #include <QSvgRenderer>
 #include <QPainter>
 #include <QDir>
 #include <QImageReader>
 #include <QScreen>
+#include <QGuiApplication>
 
 
 VideoDisplay *DlgCdg::getVideoDisplay()
@@ -152,8 +152,7 @@ void DlgCdg::mouseDoubleClickEvent([[maybe_unused]]QMouseEvent *e)
     cdgOffsetsChanged();
     m_settings.setCdgWindowFullscreen(m_fullScreen);
     m_settings.saveWindowState(this);
-    QDesktopWidget widget;
-    m_settings.setCdgWindowFullscreenMonitor(widget.screenNumber(this));
+    m_settings.setCdgWindowFullscreenMonitor(QGuiApplication::screens().indexOf(screen()));
 }
 
 QFileInfoList DlgCdg::getSlideShowImages()
@@ -333,8 +332,7 @@ void DlgCdg::btnToggleFullscreenClicked()
         showNormal();
     m_settings.setCdgWindowFullscreen(m_fullScreen);
     m_settings.saveWindowState(this);
-    QDesktopWidget widget;
-    m_settings.setCdgWindowFullscreenMonitor(widget.screenNumber(this));
+    m_settings.setCdgWindowFullscreenMonitor(QGuiApplication::screens().indexOf(screen()));
     cdgOffsetsChanged();
 }
 
@@ -425,7 +423,6 @@ TransparentWidget::TransparentWidget(QWidget *parent)
     setWindowFlags(Qt::FramelessWindowHint);
     auto layout = new QHBoxLayout(this);
     setLayout(layout);
-    layout->setMargin(0);
     layout->setSpacing(0);
     layout->setContentsMargins(0,0,0,0);
     setContentsMargins(0,0,0,0);
@@ -453,13 +450,8 @@ void TransparentWidget::setBackgroundColor(const QColor &color) const {
 void TransparentWidget::setTextFont(const QFont &font) {
     m_label->setFont(font);
     m_label->setAlignment(Qt::AlignVCenter | Qt::AlignHCenter);
-#if (QT_VERSION >= QT_VERSION_CHECK(5,11,0))
     setFixedSize(QFontMetrics(font).horizontalAdvance("_____"), QFontMetrics(font).height());
     m_label->setFixedSize(QFontMetrics(font).horizontalAdvance("_____"), QFontMetrics(font).height());
-#else
-    setFixedSize(QFontMetrics(font).width("_____"),QFontMetrics(font).tightBoundingRect("0123456789:").height());
-    m_label->setFixedSize(QFontMetrics(font).width("_____"),QFontMetrics(font).tightBoundingRect("0123456789:").height());
-#endif
 }
 
 void TransparentWidget::resetPosition() {
