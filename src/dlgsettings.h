@@ -35,6 +35,8 @@
 
 std::ostream& operator<<(std::ostream& os, const QString& s);
 
+class QTimer;
+
 namespace Ui {
 class DlgSettings;
 }
@@ -61,6 +63,7 @@ private:
     };
     OKJSongbookAPI &songbookApi;
     Settings m_settings;
+
 
 public:
     explicit DlgSettings(MediaBackend &AudioBackend, MediaBackend &BmAudioBackend, OKJSongbookAPI &songbookAPI,
@@ -100,7 +103,7 @@ signals:
     void karaokeAutoAdvanceChanged(bool enabled);
     void enforceAspectRatioChanged(bool enabled);
     void treatAllSingersAsRegsChanged(bool enabled);
-    void spotifyEnabledChanged(bool enabled);
+
     void requestServerIntervalChanged(int interval);
     void rotationDurationSettingsModified();
     void rotationShowNextSongChanged(bool enabled);
@@ -166,7 +169,6 @@ private slots:
     void on_btnDurationBgColor_clicked();
     void on_btnLogDirBrowse_clicked();
     void on_checkBoxProgressiveSearch_toggled(bool checked);
-    void on_cbxPreviewEnabled_toggled(bool checked);
     void on_comboBoxKAudioDevices_currentIndexChanged(int index);
     void on_comboBoxBAudioDevices_currentIndexChanged(int index);
     void on_checkBoxEnforceAspectRatio_clicked(bool checked);
@@ -176,6 +178,7 @@ private slots:
     void on_checkBoxHardwareAccel_toggled(bool checked);
     void on_checkBoxCdgPrescaling_stateChanged(int arg1);
     void on_checkBoxCurrentSingerTop_toggled(bool checked);
+
     void keySequenceEditChanged(QKeySequence sequence);
     // QWidget interface
 protected:

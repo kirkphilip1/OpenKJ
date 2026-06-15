@@ -34,29 +34,91 @@ A few features:
 * Autoplay karaoke mode
 * Lots of other little things
 
-It currently handles media+g zip files (zip files containing an mp3, wav, or ogg file and a cdg file) and paired mp3 and cdg files.  I'll be adding others in the future if anyone expresses interest.  It also can play non-cdg based video files (mkv, mp4, mpg, avi) for both break music and karaoke.
+It currently handles media+g zip files (zip files containing an mp3, wav, or ogg file and a cdg file) and paired mp3 and cdg files. It also can play non-cdg based video files (mkv, mp4, mpg, avi) for both break music and karaoke.
 
-Database entries for the songs are based on the file naming scheme.  I've included the common ones I've come across which should cover 90% of what's out there. Custom patterns can be also defined in the program using regular expressions.
+Database entries for the songs are based on the file naming scheme. Custom patterns can also be defined in the program using regular expressions.
 
+---
 
+## Building OpenKJ
 
-**Requirements to build OpenKJ:**
+OpenKJ is built using CMake and requires a C++20 compliant compiler, Qt6, and LibVLC. 
+*Note: `spdlog`, `libzip`, and `taglib` are automatically fetched and built statically using CPM (CMake Package Manager) during configuration.*
 
-* Qt 5.x
-* gstreamer 1.4 or above
-* spdlog
-* taglib
+### Requirements
+- **Qt 6** (Core, Gui, Sql, Network, NetworkAuth, Widgets, Concurrent, Svg, PrintSupport, Multimedia, WebSockets)
+- **LibVLC** (3.0+)
+- **CMake** (3.14+)
+- **Ninja** or **Make**
 
-**Linux**
+---
 
-Build using cmake from the command line or in your IDE of choice
+### **macOS**
 
-**Mac**
+1. **Install Dependencies** (using Homebrew):
+   ```bash
+   brew install cmake ninja pkgconf cppunit utf8cpp qt
+   brew install --cask vlc
+   ```
 
-Building now works on OS X in Qt Creator using the native xcode compiler.  Use the latest stable version of the GStreamer SDK from http://gstreamer.freedesktop.org.
+2. **Configure & Build**:
+   ```bash
+   # Get the Qt installation prefix from Homebrew
+   QT_PREFIX=$(brew --prefix qt)
 
+   # Configure the build directory
+   cmake -DSPDLOG_USE_BUNDLED=true -DCMAKE_BUILD_TYPE=Release -DBUILDONLY=True -DCMAKE_PREFIX_PATH=$QT_PREFIX -B build -G Ninja
 
-**Windows**
+   # Compile the app
+   cmake --build build
+   ```
+   The built `openkj.app` bundle will be located inside the `build/` directory.
 
-Building now works on Windows in Qt Creator using the msvc build system (both 32 and 64 bit).  Use the latest stable version of the GStreamer SDK from http://gstreamer.freedesktop.org.  You will likely need to modify the paths in the OpenKJ.pro file to match your devel environment.  Installers can be found at http://openkj.org/ if you just want to run the software and not build it yourself or help out with development.
+---
 
+### **Linux**
+
+#### Ubuntu / Debian
+1. **Install Dependencies**:
+   ```bash
+   sudo apt update
+   sudo apt install build-essential cmake ninja-build pkg-config \
+                    qt6-base-dev qt6-svg-dev qt6-multimedia-dev \
+                    qt6-networkauth-dev qt6-websockets-dev libvlc-dev
+   ```
+
+#### Fedora
+1. **Install Dependencies** (Note: `vlc-devel` requires the **RPM Fusion Free** repository to be enabled):
+   ```bash
+   sudo dnf install cmake ninja-build gcc-c++ pkgconfig \
+                    qt6-qtbase-devel qt6-qtsvg-devel qt6-qtmultimedia-devel \
+                    qt6-qtnetworkauth-devel qt6-qtwebsockets-devel vlc-devel
+   ```
+
+#### Build Commands
+```bash
+# Configure the build directory
+cmake -DSPDLOG_USE_BUNDLED=true -DCMAKE_BUILD_TYPE=Release -B build -G Ninja
+
+# Compile the application
+cmake --build build
+```
+
+---
+
+### **Windows**
+
+1. **Install Dependencies**:
+   - **Visual Studio 2022**: Install with the "Desktop development with C++" workload (MSVC compiler).
+   - **Qt 6**: Install via the Qt Online Installer. Select the **MSVC 2022 64-bit** compiler component, along with modules for **SVG**, **Network Auth**, **Multimedia**, and **WebSockets**.
+   - **CMake** and **Ninja** (available via Visual Studio installer, or standalone).
+   - **LibVLC SDK**: Download the 64-bit VLC zip file (VLC 3.x) from VideoLAN and extract it to a directory, e.g., `C:/vlc-sdk`.
+
+2. **Configure & Build** (Run inside the **x64 Native Tools Command Prompt for VS 2022**):
+   ```cmd
+   # Configure the build directory (pointing to the extracted LibVLC SDK)
+   cmake -B build -DCMAKE_BUILD_TYPE=Release -DLIBVLC_SDK_PATH="C:/vlc-sdk" -G Ninja
+
+   # Compile the application
+   cmake --build build
+   ```

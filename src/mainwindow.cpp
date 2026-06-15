@@ -720,22 +720,6 @@ MainWindow::MainWindow(QWidget *parent) :
     m_settings.setStartupOk(true);
     m_mediaBackendBm.stop(true);
 
-    m_spotifyAuth = new SpotifyAuthController(this);
-    m_spotifyClient = new SpotifyClient(m_spotifyAuth, this);
-    m_spotifyTab = new SpotifyTab(m_spotifyAuth, m_spotifyClient, this);
-    if (m_settings.spotifyEnabled()) {
-        ui->tabWidget->addTab(m_spotifyTab, "Spotify");
-    }
-
-    connect(m_spotifyClient, &SpotifyClient::volumeChanged, this, [](int vol) {
-        QSettings settings;
-        if (vol > 0) {
-            settings.setValue("spotify/last_volume", vol);
-        }
-    });
-
-
-
     loadSettings();
     setupShortcuts();
     setupConnections();
@@ -1368,10 +1352,7 @@ void MainWindow::play(const QString &karaokeFilePath, const bool &k2k) {
                                    audioFile.toStdString());
                     m_mediaBackendKar.setMediaCdg(cdgFile, audioFile);
                     if (!k2k) {
-                        if (spotifyUseForBreakMusic())
-                            fadeOutSpotify();
-                        else
-                            m_mediaBackendBm.fadeOut(!m_settings.bmKCrossFade());
+                        m_mediaBackendBm.fadeOut(!m_settings.bmKCrossFade());
                     }
                     m_logger->info("{} Beginning playback of file: {}", m_loggingPrefix, audioFile.toStdString());
                     QApplication::setOverrideCursor(Qt::WaitCursor);
@@ -1415,10 +1396,7 @@ void MainWindow::play(const QString &karaokeFilePath, const bool &k2k) {
             m_mediaBackendKar.setMediaCdg(m_mediaTempDir->path() + QDir::separator() + cdgTmpFile,
                                           m_mediaTempDir->path() + QDir::separator() + audTmpFile);
             if (!k2k) {
-                if (spotifyUseForBreakMusic())
-                    fadeOutSpotify();
-                else
-                    m_mediaBackendBm.fadeOut(!m_settings.bmKCrossFade());
+                m_mediaBackendBm.fadeOut(!m_settings.bmKCrossFade());
             }
             QApplication::setOverrideCursor(Qt::WaitCursor);
             m_mediaBackendKar.play();
@@ -1433,10 +1411,7 @@ void MainWindow::play(const QString &karaokeFilePath, const bool &k2k) {
                            tmpFilePath.toStdString());
             m_mediaBackendKar.setMedia(tmpFilePath);
             if (!k2k) {
-                if (spotifyUseForBreakMusic())
-                    fadeOutSpotify();
-                else
-                    m_mediaBackendBm.fadeOut();
+                m_mediaBackendBm.fadeOut();
             }
             m_mediaBackendKar.play();
             m_mediaBackendKar.fadeInImmediate();
@@ -1546,10 +1521,7 @@ void MainWindow::buttonStopClicked() {
     m_kAASkip = true;
     cdgWindow->showAlert(false);
     audioRecorder.stop();
-    if (spotifyUseForBreakMusic()) {
-        fadeInSpotify();
-        m_mediaBackendKar.stop();
-    } else if (m_settings.bmKCrossFade()) {
+    if (m_settings.bmKCrossFade()) {
         m_mediaBackendBm.fadeIn(false);
         m_mediaBackendKar.stop();
     } else {
@@ -1827,20 +1799,6 @@ void MainWindow::actionSettingsTriggered() {
     connect(settingsDialog, &DlgSettings::rotationDurationSettingsModified, this, &MainWindow::updateRotationDuration);
     connect(settingsDialog, &DlgSettings::requestServerIntervalChanged, &m_songbookApi, &OKJSongbookAPI::setInterval);
     connect(settingsDialog, &DlgSettings::shortcutsChanged, this, &MainWindow::shortcutsUpdated);
-    connect(settingsDialog, &DlgSettings::spotifyEnabledChanged, this, [this](bool enabled) {
-        int idx = ui->tabWidget->indexOf(m_spotifyTab);
-        if (enabled && idx == -1) {
-            ui->tabWidget->addTab(m_spotifyTab, "Spotify");
-            if (m_spotifyClient) {
-                m_spotifyClient->setEnabled(true);
-            }
-        } else if (!enabled && idx != -1) {
-            ui->tabWidget->removeTab(idx);
-            if (m_spotifyClient) {
-                m_spotifyClient->setEnabled(false);
-            }
-        }
-    });
 
     connect(settingsDialog, &DlgSettings::treatAllSingersAsRegsChanged, this, &MainWindow::treatAllSingersAsRegsChanged);
     connect(settingsDialog, &DlgSettings::enforceAspectRatioChanged, &m_mediaBackendKar, &MediaBackend::setEnforceAspectRatio);
@@ -2019,11 +1977,7 @@ void MainWindow::karaokeMediaBackend_stateChanged(const MediaBackend::State &sta
         if (state == m_lastAudioState || m_k2kTransition)
             return;
         m_lastAudioState = state;
-        if (spotifyUseForBreakMusic()) {
-            fadeInSpotify();
-        } else {
-            m_mediaBackendBm.fadeIn(false);
-        }
+        m_mediaBackendBm.fadeIn(false);
         if (m_settings.karaokeAutoAdvance()) {
             m_logger->info("{}  - Karaoke Autoplay is enabled", m_loggingPrefix);
             if (m_kAASkip) {
@@ -4467,63 +4421,5 @@ void MainWindow::showAddSingerDialog() {
     } else
         dlgAddSinger->raise();
 }
-
-void MainWindow::fadeOutSpotify() {
-    if (!m_spotifyClient) return;
-
-    m_spotifyFadeTimer.disconnect();
-    
-    QSettings settings;
-    // Get current volume from Spotify to know where to start fading from
-    m_spotifyFadeCurrentVol = settings.value("spotify/last_volume", 75).toInt();
-    if (m_spotifyFadeCurrentVol <= 0) m_spotifyFadeCurrentVol = 75;
-    
-    connect(&m_spotifyFadeTimer, &QTimer::timeout, this, [this]() {
-        m_spotifyFadeCurrentVol -= 20;
-        if (m_spotifyFadeCurrentVol <= 0) {
-            m_spotifyFadeCurrentVol = 0;
-            m_spotifyFadeTimer.stop();
-            m_spotifyClient->setVolume(0);
-            m_spotifyClient->pause();
-        } else {
-            m_spotifyClient->setVolume(m_spotifyFadeCurrentVol);
-        }
-    });
-    m_spotifyFadeTimer.start(600); // 5 steps over 3 seconds
-}
-
-void MainWindow::fadeInSpotify() {
-    if (!m_spotifyClient) return;
-
-    m_spotifyFadeTimer.disconnect();
-    
-    m_spotifyFadeCurrentVol = 0;
-    
-    QSettings settings;
-    m_spotifyFadeTargetVol = settings.value("spotify/last_volume", 75).toInt();
-    if (m_spotifyFadeTargetVol <= 0) m_spotifyFadeTargetVol = 75;
-    
-    m_spotifyClient->play();
-    m_spotifyClient->setVolume(0);
-    
-    connect(&m_spotifyFadeTimer, &QTimer::timeout, this, [this]() {
-        m_spotifyFadeCurrentVol += 20;
-        if (m_spotifyFadeCurrentVol >= m_spotifyFadeTargetVol) {
-            m_spotifyFadeCurrentVol = m_spotifyFadeTargetVol;
-            m_spotifyFadeTimer.stop();
-        }
-        m_spotifyClient->setVolume(m_spotifyFadeCurrentVol);
-    });
-    m_spotifyFadeTimer.start(600); // 5 steps over 3 seconds
-}
-
-bool MainWindow::spotifyUseForBreakMusic() const {
-    if (!m_settings.spotifyEnabled()) return false;
-    QSettings settings;
-    return settings.value("spotify/use_for_break_music", false).toBool();
-}
-
-
-
 
 

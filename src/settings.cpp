@@ -1612,16 +1612,6 @@ bool Settings::bmKCrossFade()
     return settings->value("bmKCrossFade", true).toBool();
 }
 
-bool Settings::spotifyUseForBreakMusic() const
-{
-    return settings->value("spotify/use_for_break_music", false).toBool();
-}
-
-bool Settings::spotifyEnabled() const
-{
-    return settings->value("spotify/enabled", false).toBool();
-}
-
 bool Settings::requestRemoveOnRotAdd()
 {
     return settings->value("requestRemoveOnRotAdd", false).toBool();
@@ -1764,16 +1754,6 @@ void Settings::dbSetLazyLoadDurations(bool val)
 void Settings::setBmKCrossfade(bool enabled)
 {
     settings->setValue("bmKCrossFade", enabled);
-}
-
-void Settings::setSpotifyUseForBreakMusic(bool enabled)
-{
-    settings->setValue("spotify/use_for_break_music", enabled);
-}
-
-void Settings::setSpotifyEnabled(bool enabled)
-{
-    settings->setValue("spotify/enabled", enabled);
 }
 
 SfxEntry::SfxEntry()

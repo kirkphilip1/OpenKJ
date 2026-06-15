@@ -19,10 +19,9 @@ public:
     void immediateIn();
     void immediateOut();
     [[nodiscard]] FaderState state();
+    [[nodiscard]] double volume() const;
 
 private:
-    double volume();
-
     double m_volume{1.0};
     QTimer m_timer;
     double m_targetVol{0.0};

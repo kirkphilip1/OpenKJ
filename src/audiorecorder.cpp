@@ -3,6 +3,8 @@
 #include <QDateTime>
 #include <QMediaFormat>
 #include <spdlog/spdlog.h>
+#include <QPermissions>
+#include <QCoreApplication>
 
 AudioRecorder::AudioRecorder(QObject *parent) : QObject(parent) {
     logger = spdlog::get("logger");
@@ -10,6 +12,28 @@ AudioRecorder::AudioRecorder(QObject *parent) : QObject(parent) {
         logger = spdlog::default_logger();
     }
     logger->info("{} Initializing AudioRecorder instance using Qt6 Multimedia", m_loggingPrefix);
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    QMicrophonePermission micPermission;
+    switch (qApp->checkPermission(micPermission)) {
+        case Qt::PermissionStatus::Undetermined:
+            logger->info("{} Microphone permission undetermined, requesting...", m_loggingPrefix);
+            qApp->requestPermission(micPermission, [this](const QPermission &permission) {
+                if (permission.status() == Qt::PermissionStatus::Granted) {
+                    logger->info("{} Microphone permission granted by user", m_loggingPrefix);
+                } else {
+                    logger->warn("{} Microphone permission denied by user", m_loggingPrefix);
+                }
+            });
+            break;
+        case Qt::PermissionStatus::Granted:
+            logger->info("{} Microphone permission already granted", m_loggingPrefix);
+            break;
+        case Qt::PermissionStatus::Denied:
+            logger->warn("{} Microphone permission is denied", m_loggingPrefix);
+            break;
+    }
+#endif
     m_startDateTime = QDateTime::currentDateTime().toString("yyyy-MM-dd-hhmm");
 
     m_audioInput = new QAudioInput(this);
@@ -118,21 +142,21 @@ void AudioRecorder::record(const QString &filename) {
 }
 
 void AudioRecorder::stop() {
-    if (m_recorder) {
+    if (m_recorder && m_recorder->recorderState() != QMediaRecorder::StoppedState) {
         logger->info("{} Stopping recording", m_loggingPrefix);
         m_recorder->stop();
     }
 }
 
 void AudioRecorder::pause() {
-    if (m_recorder) {
+    if (m_recorder && m_recorder->recorderState() == QMediaRecorder::RecordingState) {
         logger->info("{} Pausing recording", m_loggingPrefix);
         m_recorder->pause();
     }
 }
 
 void AudioRecorder::unpause() {
-    if (m_recorder) {
+    if (m_recorder && m_recorder->recorderState() == QMediaRecorder::PausedState) {
         logger->info("{} Resuming recording", m_loggingPrefix);
         m_recorder->record(); // QMediaRecorder::record() resumes from paused state
     }

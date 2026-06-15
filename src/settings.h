@@ -247,8 +247,6 @@ public:
     int getEqBLevel(int band);
     int requestServerInterval();
     bool bmKCrossFade();
-    bool spotifyUseForBreakMusic() const;
-    bool spotifyEnabled() const;
     bool requestRemoveOnRotAdd();
     bool requestDialogAutoShow();
     bool checkUpdates();
@@ -335,8 +333,6 @@ public slots:
     void dbSetLazyLoadDurations(bool val);
     void dbSetSkipValidation(bool val);
     void setBmKCrossfade(bool enabled);
-    void setSpotifyUseForBreakMusic(bool enabled);
-    void setSpotifyEnabled(bool enabled);
     void setShowCdgWindow(bool show);
     void setCdgWindowFullscreen(bool fullScreen);
     void setCdgOffsetTop(int pixels);

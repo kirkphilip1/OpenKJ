@@ -26,6 +26,8 @@ inline void aligned_free_helper(uchar *ptr) {
 }
 #endif
 
+
+
 // LibVLC callbacks implementation
 unsigned setup_cb(void **opaque, char *chroma, unsigned *width, unsigned *height, unsigned *pitches, unsigned *lines) {
     auto *backend = static_cast<MediaBackend*>(*opaque);
@@ -173,8 +175,7 @@ MediaBackend::MediaBackend(QObject *parent, QString objectName, MediaType type)
         }
     });
 
-    // Populate devices and apply saved settings on startup
-    getOutputDevices();
+    // Apply saved settings on startup
     if (m_type == Karaoke) {
         setAudioOutputDevice(m_settings.audioOutputDevice());
     } else if (m_type == BackgroundMusic) {
@@ -228,6 +229,10 @@ void MediaBackend::setAudioOutputDevice(const AudioOutputDevice &device) {
 
 void MediaBackend::setAudioOutputDevice(const QString &deviceName) {
     if (!m_vlcPlayer) return;
+    if (deviceName == "Default" || deviceName.isEmpty()) {
+        libvlc_audio_output_device_set(m_vlcPlayer, nullptr, nullptr);
+        return;
+    }
     if (m_audioOutputDevices.empty()) {
         getOutputDevices();
     }
@@ -374,10 +379,22 @@ void MediaBackend::eventTimer_timeout() {
             qint64 pos = position();
             if (dur > 10000 && pos > 10000) {
                 qint64 remaining = dur - pos;
-                if (remaining <= 4000) {
-                    m_silenceDetectedEmitted = true;
-                    m_logger->info("{} Simulating silence detection near end of track (remaining: {}ms)", m_loggingPrefix, remaining);
-                    emit silenceDetected();
+                if (m_cdgLastDrawPosMs > 0) {
+                    // CDG Silence detection: stop after 2 seconds of silence past the last draw instruction,
+                    // but only if we are near the end of the track (remaining <= 6000) to protect active outros.
+                    if (pos >= m_cdgLastDrawPosMs + 2000 && remaining <= 6000) {
+                        m_silenceDetectedEmitted = true;
+                        m_logger->info("{} Silence detected 2s after last CDG draw instruction (pos: {}ms, last draw: {}ms, remaining: {}ms)",
+                                       m_loggingPrefix, pos, m_cdgLastDrawPosMs, remaining);
+                        emit silenceDetected();
+                    }
+                } else {
+                    // Non-CDG silence detection (simulated)
+                    if (remaining <= 4000) {
+                        m_silenceDetectedEmitted = true;
+                        m_logger->info("{} Simulating silence detection near end of track (remaining: {}ms)", m_loggingPrefix, remaining);
+                        emit silenceDetected();
+                    }
                 }
             }
         }
@@ -462,9 +479,18 @@ void MediaBackend::setMedia(const QString &filename) {
     m_hasVideo = false;
     emit hasActiveVideoChanged(false);
 
+    if (!m_cdgFilename.isEmpty()) {
+        m_cdgLastDrawPosMs = getCdgLastDrawPositionMs(m_cdgFilename);
+        m_logger->info("{} Parsed CDG file, last draw position: {}ms", m_loggingPrefix, m_cdgLastDrawPosMs);
+    } else {
+        m_cdgLastDrawPosMs = 0;
+    }
+
     updateVolume();
     updateAudioFilters();
 }
+
+
 
 void MediaBackend::setMediaCdg(const QString &cdgFilename, const QString &audioFilename) {
     recreatePlayerIfNeeded();
@@ -491,6 +517,13 @@ void MediaBackend::setMediaCdg(const QString &cdgFilename, const QString &audioF
             m_hasVideo = false;
             emit hasActiveVideoChanged(false);
             
+            if (!m_cdgFilename.isEmpty()) {
+                m_cdgLastDrawPosMs = getCdgLastDrawPositionMs(m_cdgFilename);
+                m_logger->info("{} Parsed CDG file, last draw position: {}ms", m_loggingPrefix, m_cdgLastDrawPosMs);
+            } else {
+                m_cdgLastDrawPosMs = 0;
+            }
+
             updateVolume();
             updateAudioFilters();
         } else {
@@ -586,9 +619,7 @@ void MediaBackend::setEqLevel(const int &band, const int &level) {
 
 void MediaBackend::updateVolume() {
     if (!m_vlcPlayer) return;
-    double volMult = (m_fader->state() == AudioFader::FadedIn) ? 1.0 :
-                     (m_fader->state() == AudioFader::FadedOut) ? 0.0 :
-                     (m_fader->state() == AudioFader::FadingIn || m_fader->state() == AudioFader::FadingOut) ? 0.5 : 1.0; 
+    double volMult = m_fader ? m_fader->volume() : 1.0;
     // Fallback multiplier check if not fully fading
     int vol = static_cast<int>(m_volume * volMult);
     if (m_muted) vol = 0;
@@ -663,4 +694,51 @@ void MediaBackend::recreatePlayerIfNeeded() {
             setAudioOutputDevice(m_settings.audioOutputDeviceBm());
         }
     }
+}
+
+qint64 MediaBackend::getCdgLastDrawPositionMs(const QString &cdgPath) {
+    QFile file(cdgPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return 0;
+    }
+    qint64 size = file.size();
+    qint64 numPackets = size / 24;
+    if (numPackets == 0) return 0;
+
+    uchar *data = file.map(0, size);
+    if (data) {
+        for (qint64 i = numPackets - 1; i >= 0; --i) {
+            uchar command = data[i * 24] & 0x3F;
+            uchar instruction = data[i * 24 + 1] & 0x3F;
+            if (command == 0x09) {
+                if (instruction == 6 || instruction == 38 || instruction == 20 || instruction == 24 || instruction == 1) {
+                    file.unmap(data);
+                    return (i * 10) / 3;
+                }
+            }
+        }
+        file.unmap(data);
+    } else {
+        const int chunkSize = 4096;
+        QByteArray buffer;
+        qint64 offset = size;
+        while (offset > 0) {
+            qint64 readSize = std::min(static_cast<qint64>(chunkSize), offset);
+            offset -= readSize;
+            if (!file.seek(offset)) break;
+            buffer = file.read(readSize);
+            qint64 localPackets = buffer.size() / 24;
+            for (qint64 j = localPackets - 1; j >= 0; --j) {
+                qint64 globalIndex = (offset / 24) + j;
+                uchar command = buffer[j * 24] & 0x3F;
+                uchar instruction = buffer[j * 24 + 1] & 0x3F;
+                if (command == 0x09) {
+                    if (instruction == 6 || instruction == 38 || instruction == 20 || instruction == 24 || instruction == 1) {
+                        return (globalIndex * 10) / 3;
+                    }
+                }
+            }
+        }
+    }
+    return 0;
 }

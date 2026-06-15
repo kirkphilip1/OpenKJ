@@ -37,7 +37,7 @@ bool AudioFader::isFading() {
     return (m_curState == FadingIn || m_curState == FadingOut);
 }
 
-double AudioFader::volume() {
+double AudioFader::volume() const {
     return m_volume;
 }
 

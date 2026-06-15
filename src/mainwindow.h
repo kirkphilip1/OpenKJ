@@ -60,9 +60,7 @@
 #include "src/models/tablemodelhistorysongs.h"
 #include "src/models/tablemodelplaylistsongs.h"
 #include "src/models/tablemodelqueuesongs.h"
-#include "spotifyauthcontroller.h"
-#include "spotifyclient.h"
-#include "spotifytab.h"
+
 #include <spdlog/async_logger.h>
 #include <memory>
 #include <random>
@@ -167,18 +165,7 @@ private:
     QThread *m_dbThread{nullptr};
     DatabaseWorker *m_dbWorker{nullptr};
 
-    // Spotify Integration
-    SpotifyAuthController *m_spotifyAuth{nullptr};
-    SpotifyClient *m_spotifyClient{nullptr};
-    SpotifyTab *m_spotifyTab{nullptr};
-    QTimer m_spotifyFadeTimer;
-    int m_spotifyFadeTargetVol{0};
-    int m_spotifyFadeCurrentVol{0};
-    bool m_isFadingSpotify{false};
 
-    void fadeOutSpotify();
-    void fadeInSpotify();
-    bool spotifyUseForBreakMusic() const;
 
     void updateIcons();
     void setupShortcuts();
@@ -244,6 +231,8 @@ private slots:
     void bmDbUpdated();
     void bmDbCleared();
     void bmMediaStateChanged(const MediaBackend::State &newState);
+    
+
     void bmMediaPositionChanged(const qint64 &position);
     void bmMediaDurationChanged(const qint64 &duration);
     void tableViewBmPlaylistClicked(const QModelIndex &index);

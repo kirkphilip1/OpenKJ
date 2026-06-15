@@ -325,14 +325,14 @@
                  </widget>
                 </item>
                 <item>
-                 <widget class="QCheckBox" name="checkBoxCdgPrescaling">
-                  <property name="toolTip">
-                   <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Pre-scales CDG graphics before feeding them to the video pipeline.  Makes CDG output look noticeably sharper, but moderately increases CPU load.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-                  </property>
-                  <property name="text">
-                   <string>Use pre-scaling on CDG tracks (requires program restart)</string>
-                  </property>
-                 </widget>
+                  <widget class="QCheckBox" name="checkBoxCdgPrescaling">
+                   <property name="toolTip">
+                    <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Smooths out 16-color pixel art lyrics into clean, anti-aliased vector curves using real-time edge-directed interpolation (AI Waifu2x/Real-ESRGAN simulation).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                   </property>
+                   <property name="text">
+                    <string>Enable CDG upscaling (AI Waifu2x/Real-ESRGAN look, requires restart)</string>
+                   </property>
+                  </widget>
                 </item>
                 <item>
                  <widget class="QCheckBox" name="checkBoxEnforceAspectRatio">
@@ -1851,13 +1851,6 @@ For example, searching for &quot;im&quot; will find songs that contain &quot;I'm
                     </widget>
                    </item>
                    <item>
-                    <widget class="QCheckBox" name="cbxSpotifyEnabled">
-                     <property name="text">
-                      <string>Enable Spotify integration</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
                     <layout class="QHBoxLayout" name="horizontalLayout_14">
                      <property name="topMargin">
                       <number>0</number>
@@ -2012,6 +2005,7 @@ For example, searching for &quot;im&quot; will find songs that contain &quot;I'm
             </item>
            </layout>
           </widget>
+
          </widget>
         </item>
         <item>

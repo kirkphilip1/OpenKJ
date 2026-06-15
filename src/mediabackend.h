@@ -7,6 +7,7 @@
 #include <QMutex>
 #include <QImage>
 #include <QPointer>
+#include <QProcess>
 #include <QTemporaryDir>
 #include <memory>
 #include <vector>
@@ -144,11 +145,13 @@ private:
     bool m_silenceDetect{false};
     bool m_silenceDetectedEmitted{false};
     bool m_isMonoInitialized{false};
+    qint64 m_cdgLastDrawPosMs{0};
 
     void setupVlcCallbacks();
     void updateVolume();
     void updateAudioFilters();
     void recreatePlayerIfNeeded();
+    qint64 getCdgLastDrawPositionMs(const QString &cdgPath);
 
     // Friend functions for callbacks
     friend unsigned setup_cb(void **opaque, char *chroma, unsigned *width, unsigned *height, unsigned *pitches, unsigned *lines);

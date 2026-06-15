@@ -78,6 +78,8 @@ if(taglib_ADDED)
     )
 endif()
 
+
+
 # LibVLC Configuration
 if (WIN32)
     set(LIBVLC_SDK_PATH "C:/Program Files/VideoLAN/VLC" CACHE PATH "Path to LibVLC SDK")
@@ -101,9 +103,6 @@ set(SOURCE_FILES
         src/main.cpp
         src/dlgaddsong.cpp
         src/mediabackend.cpp
-        src/spotifyclient.cpp
-        src/spotifyauthcontroller.cpp
-        src/spotifytab.cpp
         src/mzarchive.cpp
         src/okjutil.h
         src/okjtypes.cpp
@@ -145,6 +144,8 @@ set(SOURCE_FILES
         src/tickernew.cpp
         src/updatechecker.cpp
         src/videodisplay.cpp
+        src/xbrz.cpp
+        src/xbrz.h
         src/volslider.cpp
         src/dlgaddsinger.cpp
         src/songshop.cpp
@@ -164,9 +165,6 @@ set(SOURCE_FILES
         src/idledetect.cpp
         src/databaseworker.cpp
         src/mainwindow.h
-        src/spotifyclient.h
-        src/spotifyauthcontroller.h
-        src/spotifytab.h
         src/dlgaddsong.h
         src/dlgvideopreview.h
         src/mediabackend.h
@@ -317,6 +315,15 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
             MACOSX_BUNDLE_ICON_FILE OpenKJ.icns
             )
     target_link_libraries(openkj PRIVATE ${LIBRARIES})
+    target_include_directories(openkj PRIVATE
+            src
+            ${taglib_SOURCE_DIR}/taglib/toolkit
+            ${taglib_SOURCE_DIR}/taglib
+    )
+    
+    qt_import_plugins(openkj
+        INCLUDE_BY_TYPE permissions
+    )
     
     if (NOT DEFINED BUILDONLY)
         get_target_property(_qt6_qmake_location Qt6::qmake IMPORTED_LOCATION)
@@ -350,6 +357,11 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
             ${WINDOWS_ICON_RC}
             )
     target_link_libraries(openkj PRIVATE ${LIBRARIES})
+    target_include_directories(openkj PRIVATE
+            src
+            ${taglib_SOURCE_DIR}/taglib/toolkit
+            ${taglib_SOURCE_DIR}/taglib
+    )
     set_property(
             TARGET openkj
             PROPERTY WIN32_EXECUTABLE true
@@ -379,3 +391,5 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
         endif ()
     endif ()
 endif ()
+
+

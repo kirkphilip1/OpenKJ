@@ -33,6 +33,7 @@
 #include <QAuthenticator>
 #include <QKeySequenceEdit>
 #include "audiorecorder.h"
+#include <QTimer>
 #include <QScreen>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -212,7 +213,6 @@ DlgSettings::DlgSettings(MediaBackend &AudioBackend, MediaBackend &BmAudioBacken
     ui->cbxSongInterruptionWarning->setChecked(m_settings.showSongInterruptionWarning());
     ui->cbxBmAutostart->setChecked(m_settings.bmAutoStart());
     ui->cbxIgnoreApos->setChecked(m_settings.ignoreAposInSearch());
-    ui->cbxSpotifyEnabled->setChecked(m_settings.spotifyEnabled());
     ui->spinBoxVideoOffset->setValue(m_settings.videoOffsetMs());
     ui->cbxStopPauseWarning->setChecked(m_settings.showSongPauseStopWarning());
     ui->cbxCheckUpdates->setChecked(m_settings.checkUpdates());
@@ -256,8 +256,6 @@ DlgSettings::DlgSettings(MediaBackend &AudioBackend, MediaBackend &BmAudioBacken
             &QCheckBox::setChecked);
     connect(&m_settings, &Settings::showSongStopPauseWarningChanged, ui->cbxStopPauseWarning, &QCheckBox::setChecked);
     connect(ui->cbxIgnoreApos, &QCheckBox::toggled, &m_settings, &Settings::setIgnoreAposInSearch);
-    connect(ui->cbxSpotifyEnabled, &QCheckBox::toggled, &m_settings, &Settings::setSpotifyEnabled);
-    connect(ui->cbxSpotifyEnabled, &QCheckBox::toggled, this, &DlgSettings::spotifyEnabledChanged);
     connect(ui->cbxCrossFade, &QCheckBox::toggled, &m_settings, &Settings::setBmKCrossfade);
     connect(ui->cbxCheckUpdates, &QCheckBox::toggled, &m_settings, &Settings::setCheckUpdates);
     connect(ui->comboBoxUpdateBranch, qOverload<int>(&QComboBox::currentIndexChanged), &m_settings,
@@ -952,12 +950,6 @@ void DlgSettings::on_checkBoxProgressiveSearch_toggled(bool checked) {
     m_settings.setProgressiveSearchEnabled(checked);
 }
 
-void DlgSettings::on_cbxPreviewEnabled_toggled(bool checked) {
-    if (!m_pageSetupDone)
-        return;
-    m_settings.setPreviewEnabled(!checked);
-}
-
 void DlgSettings::on_comboBoxKAudioDevices_currentIndexChanged(int index) {
     if (!m_pageSetupDone)
         return;
@@ -1087,3 +1079,5 @@ void DlgSettings::comboBoxFileLogLevelChanged(int index) {
     if (m_logger->level() < sink->level())
         m_logger->set_level(sink->level());
 }
+
+
