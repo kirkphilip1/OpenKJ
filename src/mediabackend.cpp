@@ -4,6 +4,71 @@
 #include <QFileInfo>
 #include <QMutexLocker>
 #include <cstdlib>
+#include <string>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef union {
+    int64_t i_int;
+    bool    b_bool;
+    float   f_float;
+    char *  psz_string;
+    void *  p_address;
+} vlc_value_t;
+
+// libvlccore exported internal functions
+void config_PutFloat(void *p_this, const char *psz_name, float f_value);
+int var_Create(void *p_obj, const char *psz_name, int i_type);
+int var_Set(void *p_obj, const char *psz_name, vlc_value_t val);
+void *vlc_object_find_name(void *p_parent, const char *psz_name);
+void vlc_object_release(void *p_obj);
+
+#ifdef __cplusplus
+}
+#endif
+
+static void set_float_var(void *p_obj, const char *psz_name, float f_value) {
+    if (!p_obj) return;
+    vlc_value_t val;
+    val.f_float = f_value;
+    var_Create(p_obj, psz_name, 0x8050); // VLC_VAR_FLOAT | VLC_VAR_DOINHERIT
+    var_Set(p_obj, psz_name, val);
+}
+
+void libvlc_config_set(libvlc_instance_t *p_instance, const char *psz_name, const char *psz_value) {
+    if (p_instance) {
+        void *p_vlc_object = *reinterpret_cast<void**>(p_instance);
+        if (p_vlc_object) {
+            try {
+                float val = std::stof(psz_value);
+                config_PutFloat(p_vlc_object, psz_name, val);
+            } catch (...) {
+                // Ignore parsing errors
+            }
+        }
+    }
+}
+
+void libvlc_vlm_set_variable(libvlc_media_player_t *p_mp, const char *psz_name, float f_value) {
+    if (p_mp) {
+        set_float_var(p_mp, psz_name, f_value);
+
+        void *p_aout = vlc_object_find_name(p_mp, "aout");
+        if (p_aout) {
+            set_float_var(p_aout, psz_name, f_value);
+            vlc_object_release(p_aout);
+        }
+
+        void *p_scaletempo = vlc_object_find_name(p_mp, "scaletempo");
+        if (p_scaletempo) {
+            set_float_var(p_scaletempo, psz_name, f_value);
+            vlc_object_release(p_scaletempo);
+        }
+    }
+}
+
 
 #ifdef Q_OS_WIN
 #include <malloc.h>
@@ -488,6 +553,9 @@ void MediaBackend::setMedia(const QString &filename) {
 
     updateVolume();
     updateAudioFilters();
+    if (m_vlcInstance) {
+        libvlc_config_set(m_vlcInstance, "pitch-shift", QString::number(m_pitchShift).toUtf8().constData());
+    }
 }
 
 
@@ -526,6 +594,9 @@ void MediaBackend::setMediaCdg(const QString &cdgFilename, const QString &audioF
 
             updateVolume();
             updateAudioFilters();
+            if (m_vlcInstance) {
+                libvlc_config_set(m_vlcInstance, "pitch-shift", QString::number(m_pitchShift).toUtf8().constData());
+            }
         } else {
             m_logger->error("{} Failed to copy media files to temp dir for playback", m_loggingPrefix);
             emit audioError("Failed to copy media files to temp dir");
@@ -583,6 +654,9 @@ void MediaBackend::setPitchShift(const int &pitchShift) {
     m_pitchShift = pitchShift;
     emit pitchChanged(m_pitchShift);
     m_logger->info("{} Pitch shift set to: {}", m_loggingPrefix, pitchShift);
+    if (m_vlcPlayer) {
+        libvlc_vlm_set_variable(m_vlcPlayer, "pitch-shift", static_cast<float>(pitchShift));
+    }
 }
 
 void MediaBackend::fadeOut(const bool &waitForFade) {
