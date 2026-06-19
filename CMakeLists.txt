@@ -80,24 +80,12 @@ endif()
 
 
 
-# LibVLC Configuration
-if (WIN32)
-    set(LIBVLC_SDK_PATH "C:/Program Files/VideoLAN/VLC" CACHE PATH "Path to LibVLC SDK")
-    include_directories(${LIBVLC_SDK_PATH}/sdk/include)
-    link_directories(${LIBVLC_SDK_PATH}/sdk/lib)
-    set(LIBVLC_LIBRARIES libvlc libvlccore)
-elseif (APPLE)
-    set(LIBVLC_SDK_PATH "/Applications/VLC.app/Contents/MacOS" CACHE PATH "Path to LibVLC SDK")
-    include_directories(${LIBVLC_SDK_PATH}/include)
-    link_directories(${LIBVLC_SDK_PATH}/lib)
-    set(LIBVLC_LIBRARIES vlc vlccore)
-else ()
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(LIBVLC REQUIRED libvlc)
-    include_directories(${LIBVLC_INCLUDE_DIRS})
-    link_directories(${LIBVLC_LIBRARY_DIRS})
-    set(LIBVLC_LIBRARIES ${LIBVLC_LIBRARIES})
-endif ()
+# GStreamer Configuration
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(GSTREAMER REQUIRED gstreamer-1.0 gstreamer-video-1.0 gstreamer-audio-1.0)
+include_directories(${GSTREAMER_INCLUDE_DIRS})
+link_directories(${GSTREAMER_LIBRARY_DIRS})
+set(GSTREAMER_LIBRARIES ${GSTREAMER_LIBRARIES})
 
 set(SOURCE_FILES
         src/main.cpp
@@ -257,7 +245,7 @@ set(LIBRARIES
         spdlog::spdlog
         zip
         tag
-        ${LIBVLC_LIBRARIES}
+        ${GSTREAMER_LIBRARIES}
         Qt6::Widgets
         Qt6::Core
         Qt6::Gui
@@ -391,17 +379,6 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
         message(WARNING "QT_INSTALL_PREFIX not found — Qt frameworks will NOT be bundled.")
     endif ()
 
-    # -------------------------------------------------------------------------
-    # Step 2: Copy LibVLC dylibs and plugins into the .app and fix @rpaths.
-    # Uses cmake/macos_bundle_vlc.cmake as a standalone script.
-    # -------------------------------------------------------------------------
-    add_custom_command(TARGET openkj POST_BUILD
-        COMMAND ${CMAKE_COMMAND}
-                -DAPP_BUNDLE="$<TARGET_BUNDLE_DIR:openkj>"
-                -DVLC_SDK_PATH="${LIBVLC_SDK_PATH}"
-                -P "${CMAKE_SOURCE_DIR}/cmake/macos_bundle_vlc.cmake"
-        COMMENT "Bundling LibVLC dylibs and plugins into .app..."
-    )
 endif ()
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
@@ -451,37 +428,6 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     else ()
         message(WARNING "QT_INSTALL_PREFIX not found — Qt DLLs will NOT be bundled.")
     endif ()
-
-    # -------------------------------------------------------------------------
-    # Step 2: Copy LibVLC DLLs and plugins directory next to the .exe.
-    # LIBVLC_SDK_PATH is set at the top of this file (defaults to C:/vlc-sdk
-    # in CI, or C:/Program Files/VideoLAN/VLC for local installs).
-    # -------------------------------------------------------------------------
-    if (EXISTS "${LIBVLC_SDK_PATH}")
-        # Copy the two core DLLs
-        foreach(VLC_DLL libvlc.dll libvlccore.dll)
-            add_custom_command(TARGET openkj POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                        "${LIBVLC_SDK_PATH}/${VLC_DLL}"
-                        "$<TARGET_FILE_DIR:openkj>/${VLC_DLL}"
-                COMMENT "Copying ${VLC_DLL}..."
-            )
-        endforeach()
-        # Copy the plugins directory
-        if (EXISTS "${LIBVLC_SDK_PATH}/plugins")
-            add_custom_command(TARGET openkj POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_directory
-                        "${LIBVLC_SDK_PATH}/plugins"
-                        "$<TARGET_FILE_DIR:openkj>/plugins"
-                COMMENT "Copying VLC plugins..."
-            )
-        else()
-            message(WARNING "VLC plugins dir not found at ${LIBVLC_SDK_PATH}/plugins")
-        endif()
-    else()
-        message(WARNING "LIBVLC_SDK_PATH does not exist: ${LIBVLC_SDK_PATH}\n"
-            "Set -DLIBVLC_SDK_PATH=<path> to the VLC installation directory.")
-    endif()
 endif ()
 
 

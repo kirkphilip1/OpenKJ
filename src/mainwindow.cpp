@@ -19,7 +19,7 @@
 #include "dlgaddsong.h"
 #include <taglib.h>
 #include <zip.h>
-#include <vlc/vlc.h>
+#include <gst/gst.h>
 #include "okjtypes.h"
 
 #ifdef _MSC_VER
@@ -3099,7 +3099,7 @@ void MainWindow::actionAboutTriggered() {
     text += "\n\nIncluded library info";
     text += "\n\nQt version: " + QString(QT_VERSION_STR);
     text += "\nLicense: GNU GPL v3";
-    text += "\n\nLibVLC version: " + QString(libvlc_get_version());
+    text += "\n\nGStreamer version: " + QString(gst_version_string());
     text += "\nLicense: GNU LGPL v2.1";
     text += "\n\nspdlog version: " + QString::number(SPDLOG_VER_MAJOR) + '.' + QString::number(SPDLOG_VER_MINOR) + '.' + QString::number(SPDLOG_VER_PATCH);
     text += "\nLicense: MIT";

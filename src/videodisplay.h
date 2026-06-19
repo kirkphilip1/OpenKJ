@@ -5,6 +5,8 @@
 #include <QBoxLayout>
 #include <QResizeEvent>
 #include <QImage>
+#include <QVideoSink>
+#include <QVideoFrame>
 
 class VideoDisplay : public QWidget
 {
@@ -16,10 +18,12 @@ private:
     bool m_fillOnPaint { false };
     bool m_repaintBackgroundOnce { false };
     QImage m_currentFrame;
+    QVideoSink *m_videoSink;
 
 public:
     explicit VideoDisplay(QWidget *parent = nullptr);
     [[nodiscard]] bool hasActiveVideo() const { return m_hasActiveVideo; }
+    QVideoSink* videoSink() const { return m_videoSink; }
 
 signals:
     void mouseMoveEvent(QMouseEvent *event) override;
@@ -30,6 +34,7 @@ public slots:
     void setHasActiveVideo(const bool &value);
     void updateFrame(const QImage &image);
     void clearFrame();
+    void onVideoFrameChanged(const QVideoFrame &frame);
 
     /**
      * @brief Fill with black on paint event when video is playing.

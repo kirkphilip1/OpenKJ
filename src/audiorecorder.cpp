@@ -3,8 +3,10 @@
 #include <QDateTime>
 #include <QMediaFormat>
 #include <spdlog/spdlog.h>
-#include <QPermissions>
 #include <QCoreApplication>
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+#include <QPermissions>
+#endif
 
 AudioRecorder::AudioRecorder(QObject *parent) : QObject(parent) {
     logger = spdlog::get("logger");
