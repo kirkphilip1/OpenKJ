@@ -1,5 +1,4 @@
 # C++ objects and libs
-
 *.slo
 *.lo
 *.o
@@ -11,7 +10,6 @@
 *.dylib
 
 # Qt-es
-
 object_script.*.Release
 object_script.*.Debug
 *_plugin_import.cpp
@@ -27,34 +25,62 @@ moc_*.h
 qrc_*.cpp
 ui_*.h
 Makefile*
-*build*
-build*
 
+# Build directories and CMake outputs
+[Bb]uild*/
+[Bb]in/
+[Oo]bj/
+CMakeCache.txt
+CMakeFiles/
+CMakeSettings.json
+cmake_install.cmake
+install_manifest.txt
+*.dir/
 
 # Qt unit tests
 target_wrapper.*
 
-
-# QtCreator
-
+# IDEs and Editors
+.vscode/
+.idea/
+*.suo
+*.user
+*.userossc
+*.sln
+*.vcxproj
+*.filters
+.vs/
 *.autosave
-
-# QtCtreator Qml
 *.qmlproject.user
 *.qmlproject.user.*
-
-# QtCtreator CMake
 CMakeLists.txt.user*
 
-# Don't include binary
-openKJ/OpenKJ
-
-# Visual Studio
-CMakeSettings.json
-.vs
-
-# CLion
-.idea
-
-
+# macOS specific files
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.Spotlight-V100
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Python (in case any helper scripts exist)
+__pycache__/
+*.py[cod]
+*$py.class
+
+# App / Binary outputs
+openKJ/OpenKJ
+OpenKJ
+*.app/
+*.dmg
+*.pkg
+
+# Agent / AI local workspace files
+.agents/
+skills-lock.json
+
+# Log files
+*.log
