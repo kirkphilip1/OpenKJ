@@ -12,7 +12,7 @@
 #include <memory>
 #include <vector>
 #include <atomic>
-#include <vlc/vlc.h>
+#include <gst/gst.h>
 #include "settings.h"
 #include "audiofader.h"
 #include "videodisplay.h"
@@ -105,18 +105,15 @@ private:
     MediaType m_type;
     Settings m_settings;
 
-    // LibVLC player variables
-    libvlc_instance_t *m_vlcInstance{nullptr};
-    libvlc_media_player_t *m_vlcPlayer{nullptr};
-    libvlc_media_t *m_vlcMedia{nullptr};
+    // GStreamer elements
+    GstElement *m_pipeline{nullptr};
+    GstElement *m_pitch{nullptr};
+    GstElement *m_eq{nullptr};
+    GstElement *m_panorama{nullptr};
+    GstElement *m_audioSink{nullptr};
+    GstElement *m_volumeElement{nullptr};
+    GstElement *m_audioBin{nullptr};
 
-    // Video memory callbacks variables
-    QMutex m_videoMutex;
-    uchar *m_videoBuffer{nullptr};
-    size_t m_videoBufferSize{0};
-    unsigned int m_videoWidth{0};
-    unsigned int m_videoHeight{0};
-    unsigned int m_videoPitch{0};
     std::atomic<bool> m_hasVideo{false};
     bool m_videoEnabled{true};
     bool m_fade{false};
@@ -128,7 +125,8 @@ private:
     QString m_cdgFilename;
     QStringList m_outputDeviceNames;
     std::vector<AudioOutputDevice> m_audioOutputDevices;
-    QTimer m_vlcEventTimer;
+
+    QTimer m_eventTimer;
     QPointer<AudioFader> m_fader{nullptr};
 
     int m_volume{100};
@@ -147,18 +145,13 @@ private:
     bool m_isMonoInitialized{false};
     qint64 m_cdgLastDrawPosMs{0};
 
-    void setupVlcCallbacks();
+    void setupPipeline();
     void updateVolume();
     void updateAudioFilters();
-    void recreatePlayerIfNeeded();
     qint64 getCdgLastDrawPositionMs(const QString &cdgPath);
 
-    // Friend functions for callbacks
-    friend unsigned setup_cb(void **opaque, char *chroma, unsigned *width, unsigned *height, unsigned *pitches, unsigned *lines);
-    friend void cleanup_cb(void *opaque);
-    friend void* lock_cb(void *opaque, void **pixels);
-    friend void unlock_cb(void *opaque, void *picture, void *const *pixels);
-    friend void display_cb(void *opaque, void *picture);
+    static gboolean busCall(GstBus *bus, GstMessage *msg, gpointer data);
+    void handleBusMessage(GstMessage *msg);
 
 private slots:
     void eventTimer_timeout();

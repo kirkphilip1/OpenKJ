@@ -13,6 +13,16 @@ VideoDisplay::VideoDisplay(QWidget *parent) : QWidget(parent)
     palette.setColor(QPalette::Window, Qt::black);
     setPalette(palette);
     setMouseTracking(true);
+
+    m_videoSink = new QVideoSink(this);
+    connect(m_videoSink, &QVideoSink::videoFrameChanged, this, &VideoDisplay::onVideoFrameChanged);
+}
+
+void VideoDisplay::onVideoFrameChanged(const QVideoFrame &frame)
+{
+    if (frame.isValid()) {
+        updateFrame(frame.toImage());
+    }
 }
 
 
